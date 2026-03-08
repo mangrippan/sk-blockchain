@@ -1,4 +1,4 @@
-namespace SriPayroll.Dtos;
+namespace Backend.Dtos;
 
 public class RoleUserDto
 {

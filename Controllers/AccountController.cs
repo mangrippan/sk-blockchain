@@ -1,26 +1,22 @@
 using System.ComponentModel.DataAnnotations;
-using SriPayroll.Dtos;
-using SriPayroll.Helpers;
-using SriPayroll.Services;
-using SriPayroll.Services.LDAP;
+using Backend.Dtos;
+using Backend.Helpers;
+using Backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace SriPayroll.Controllers;
+namespace Backend.Controllers;
 
 [Route("[controller]")]
 [ApiController]
 public class AccountController : ControllerBase
 {
     private readonly IAccountService _accountService;
-    private readonly ILdapServer _ldapServer;
     private readonly IHttpContextAccessor _httpContext;
 
-    public AccountController(IAccountService accountService, ILdapServer ldapServer,
-        IHttpContextAccessor httpContext)
+    public AccountController(IAccountService accountService, IHttpContextAccessor httpContext)
     {
         _accountService = accountService;
-        _ldapServer = ldapServer;
         _httpContext = httpContext;
     }
 
@@ -33,16 +29,12 @@ public class AccountController : ControllerBase
         {
             dto.Username = dto.Username.Replace("@apps.ipb.ac.id", "");
 
-            var password = dto.Password;
-
-            var user = _ldapServer.Authenticate(dto.Username, password);
-
-            var role = await _accountService.Login(user);
+            var role = await _accountService.Login(dto.Username, dto.Password);
             return Ok(role);
         }
-        catch (LdapAuthenticationException)
+        catch (UnauthorizedAccessException ex)
         {
-            throw new BadHttpRequestException("Email atau password salah", StatusCodes.Status400BadRequest);
+            throw new BadHttpRequestException(ex.Message, StatusCodes.Status400BadRequest);
         }
     }
 

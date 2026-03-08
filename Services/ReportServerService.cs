@@ -1,4 +1,4 @@
-namespace SriPayroll.Services;
+namespace Backend.Services;
 
 public interface IReportServerService
 {

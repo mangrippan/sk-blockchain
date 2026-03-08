@@ -2,7 +2,7 @@
 using System.Net;
 using System.Text.Json;
 
-namespace SriPayroll
+namespace Backend
 {
     public class ErrorHandlingMiddleware
     {

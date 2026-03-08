@@ -1,7 +1,7 @@
 using System.Security.Claims;
-using SriPayroll.Dtos;
+using Backend.Dtos;
 
-namespace SriPayroll.Helpers;
+namespace Backend.Helpers;
 
 public static class HttpContextExtension
 {

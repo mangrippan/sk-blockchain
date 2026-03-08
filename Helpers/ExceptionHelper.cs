@@ -4,7 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Web;
 
-namespace SriPayroll.Helpers
+namespace Backend.Helpers
 {
     public class ExceptionHelper
     {

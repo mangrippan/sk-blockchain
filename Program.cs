@@ -2,26 +2,20 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SriPayroll;
-using SriPayroll.Helpers;
-using SriPayroll.Services.LDAP;
+using Backend;
+using Backend.Helpers;
 using Microsoft.EntityFrameworkCore;
-using SriPayroll.Services;
+using Backend.Services;
 using Gelf.Extensions.Logging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using SriPayroll.Models;
+using Backend.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var ldapSettings = builder.Configuration.GetSection("Ldap");
-builder.Services.AddTransient<ILdapServer>(s => new LdapServer(ldapSettings["Host"], int.Parse(ldapSettings["Port"]),
-    ldapSettings["BaseDn"], ldapSettings["Filter"]));
-
-
-builder.Services.AddDbContext<DbPayrollContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DbPayroll")));
+builder.Services.AddDbContext<SkContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Db")));
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -34,16 +28,6 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-var reportServerUsername = builder.Configuration["ReportServer:Username"];
-var reportServerPassword = builder.Configuration["ReportServer:Password"];
-builder.Services.AddHttpClient("ReportServerClient")
-    .ConfigureHttpClient(client => { client.BaseAddress = new Uri(builder.Configuration["ReportServer:BaseUrl"]!); })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler()
-    {
-        Credentials = new NetworkCredential(reportServerUsername, reportServerPassword)
-    });
-builder.Services.AddTransient<IReportServerService, ReportServerService>();
 
 builder.Services.AddTransient<IAccountService, AccountService>();
 
@@ -69,7 +53,7 @@ builder.Services
 
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "All New SPMI API", Version = "v1" });
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Sk Kenaikan Pangkat", Version = "v1" });
     options.OperationFilter<AuthorizationHeaderParameterOperationFilter>();
     options.UseInlineDefinitionsForEnums();
     options.AddSecurityDefinition(name: "Bearer", securityScheme: new OpenApiSecurityScheme
@@ -106,7 +90,6 @@ builder.Logging.AddGelf();
 var app = builder.Build();
 
 app.UseMiddleware(typeof(ErrorHandlingMiddleware));
-
 
 app.UseSwagger();
 app.UseSwaggerUI();

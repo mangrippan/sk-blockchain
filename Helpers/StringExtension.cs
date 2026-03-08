@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
 
-namespace SriPayroll.Helpers;
+namespace Backend.Helpers;
 
 public static class StringExtension
 {

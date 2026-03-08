@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace SriPayroll.Helpers;
+namespace Backend.Helpers;
 
 public class ValidationFilter : IActionFilter
 {

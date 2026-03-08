@@ -1,7 +1,7 @@
-﻿namespace SriPayroll.Constants
+﻿namespace Backend.Constants
 {
     public class Variable
     {
-        public const int JenisSistemSriPayroll = 42;
+        public const int JenisSistemBackend = 42;
     }
 }

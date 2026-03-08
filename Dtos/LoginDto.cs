@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace SriPayroll.Dtos;
+namespace Backend.Dtos;
 
 public class LoginDto
 {

@@ -2,95 +2,88 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using SriPayroll.Dtos;
-using SriPayroll.Models;
-using SriPayroll.Services.LDAP;
+using Backend.Dtos;
+using Backend.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
-namespace SriPayroll.Services;
+namespace Backend.Services;
 
 public interface IAccountService
 {
-    Task<List<RoleUserDto>> Authorize(LdapUser user);
-    Task<UserAuhtDto> Login(LdapUser ldapUser);
+    Task<List<RoleUserDto>> Authorize(string username);
+    Task<UserAuhtDto> Login(string username, string password);
     Task<UserAuhtDto> GetAuthorize(UserAuhtDto user, int hakAksesId);
 }
 
 public class AccountService : IAccountService
 {
-    private readonly DbPayrollContext _db;
+    private readonly SkContext _db;
     private readonly IConfiguration _configuration;
-
-    public AccountService(DbPayrollContext db, IConfiguration configuration)
+    
+    public AccountService(SkContext db, IConfiguration configuration)
     {
         _db = db;
         _configuration = configuration;
     }
-
-    public async Task<UserAuhtDto> Login(LdapUser ldapUser)
+    
+    public async Task<UserAuhtDto> Login(string nip, string password)
     {
-        var roles = await Authorize(ldapUser);
-
+        // Verify user credentials from database
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.NipNidn == nip);
+    
+        if (user == null)
+            throw new UnauthorizedAccessException("Username atau password salah");
+    
+        // Verify password using BCrypt
+        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            throw new UnauthorizedAccessException("Username atau password salah");
+    
+        var roles = await Authorize(user.NipNidn);
+    
         if (roles.Count == 0)
             throw new UnauthorizedAccessException("Anda tidak memiliki akses");
-
-        return SetUserAuth(ldapUser, roles);
+    
+        return SetUserAuth(user, roles);
     }
-
-    private UserAuhtDto SetUserAuth(LdapUser ldapUser, List<RoleUserDto> roles)
+    
+    private UserAuhtDto SetUserAuth(User user, List<RoleUserDto> roles)
     {
         var role = roles.First();
-        var penggunaId = role.PenggunaId;
-        UserAuhtDto user;
-
-        if (roles.Count > 1)
+        
+        UserAuhtDto userAuth = new UserAuhtDto
         {
-            user = new UserAuhtDto
-            {
-                PenggunaId = penggunaId,
-                Roles = roles,
-                Username = ldapUser.Uid,
-                Nama = role.Nama
-            };
-
-            user.Jwt = GenerateToken(user);
-            return user;
-        }
-
-        user = new UserAuhtDto
-        {
-            OrangId = role.OrangId,
-            Nama = role.Nama,
-            Nip = role.Nip,
-            Username = ldapUser.Uid,
+            OrangId = user.Id,
+            Nama = user.NamaLengkap,
+            Nip = user.NipNidn,
+            Username = user.NipNidn,
             Roles = roles,
-            StrukturOrganisasi = role.StrukturOrganisasi,
+            StrukturOrganisasi = user.JabatanSaatIni,
             StrukturOrganisasiId = role.StrukturOrganisasiId,
             StrataId = role.StrataId,
-            JenisPengguna = role.JenisPengguna,
+            JenisPengguna = user.Role,
             JenisPenggunaId = role.JenisPenggunaId.ToString(),
-            PenggunaId = role.PenggunaId
+            PenggunaId = user.Id
         };
-
-        user.Jwt = GenerateToken(user);
-
-        return user;
+    
+        userAuth.Jwt = GenerateToken(userAuth);
+    
+        return userAuth;
     }
 
     private string GenerateToken(UserAuhtDto member, bool isToken5Min = false)
     {
         var jwtKey = _configuration["Jwt:Key"];
         if (string.IsNullOrWhiteSpace(jwtKey)) throw new Exception("JWT Key is not set");
-
+    
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
+    
         var claims = new List<Claim>
         {
             new("penggunaId", member.PenggunaId.ToString() ?? "0", ClaimValueTypes.Integer),
             new("nama", member.Nama),
-            new("username", member.Username),
             new("nip", member.Nip ?? string.Empty),
             new("strukturOrganisasiId", member.StrukturOrganisasiId.ToString() ?? "0",
                 ClaimValueTypes.Integer),
@@ -102,11 +95,11 @@ public class AccountService : IAccountService
             new("jenisPengguna", member.JenisPengguna ?? string.Empty),
             new(ClaimTypes.Role, member.JenisPenggunaId ?? "0")
         };
-
+    
         var defaultExpiration =
             DateTime.Now.AddMinutes(
                 _configuration.GetValue<int>("Jwt:ExpiryInMinutes"));
-
+    
         var jwtSecurityToken = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
@@ -116,53 +109,65 @@ public class AccountService : IAccountService
         );
         return new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken);
     }
-
-    private IQueryable<AccountViewModel> QueryHakAkses()
+    
+    public async Task<List<RoleUserDto>> Authorize(string nip)
     {
-        return new List<AccountViewModel>().AsQueryable(); // todo: Implement query to fetch hak akses
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.NipNidn == nip);
+        
+        if (user == null)
+            return new List<RoleUserDto>();
+        
+        // Map user role to RoleUserDto
+        var roles = new List<RoleUserDto>
+        {
+            new RoleUserDto
+            {
+                PenggunaId = user.Id,
+                OrangId = user.Id,
+                HakAksesId = 1, // Default access
+                StrukturOrganisasi = user.JabatanSaatIni ?? string.Empty,
+                StrukturOrganisasiId = 0, // Can be updated based on your organization structure
+                StrataId = null,
+                JenisPengguna = user.Role,
+                JenisPenggunaId = GetRoleId(user.Role),
+                Nama = user.NamaLengkap,
+                Nip = user.NipNidn
+            }
+        };
+        
+        return roles;
     }
-
-    public async Task<List<RoleUserDto>> Authorize(LdapUser user)
+    
+    private int GetRoleId(string role)
     {
-        return new List<RoleUserDto>(); // todo: Implement logic to fetch user roles
+        return role.ToLower() switch
+        {
+            "admin" => 1,
+            "dosen" => 2,
+            "reviewer" => 3,
+            _ => 0
+        };
     }
-
+    
     public async Task<UserAuhtDto> GetAuthorize(UserAuhtDto user, int hakAksesId)
     {
         var penggunaId = user.PenggunaId ?? 0;
-        var account = await QueryHakAkses().FirstOrDefaultAsync(x => x.HakAksesId == hakAksesId && x.Id == penggunaId);
-
-        if (account is null) throw new Exception("Anda tidak memiliki akses");
-
-        user.OrangId = account.PegawaiId;
-        user.Nama = account.Name;
-        user.StrukturOrganisasiId = account.StrukturOrganisasiId;
-        user.StrataId = account.StrataId;
-        user.StrukturOrganisasi = account.StrukturOrganisasi;
-        user.JenisPengguna = account.JenisPengguna;
-        user.JenisPenggunaId = account.JenisPenggunaId.ToString();
-        user.Username = account.Username;
-        user.Nip = account.Nip;
-        user.PenggunaId = account.Id;
-        user.Roles = await Authorize(new LdapUser { OrangId = user.OrangId.ToString() });
-        user.Jwt = GenerateToken(user);
-
-        return user;
-    }
+        var dbUser = await _db.Users.FirstOrDefaultAsync(x => x.Id == penggunaId);
     
-    private class AccountViewModel
-    {
-        public int Id { get; set; }
-        public int PegawaiId { get; set; }
-        public string Username { get; set; } = null!;
-        public string Name { get; set; } = null!;
-        public string Nip { get; set; } = null!;
-        public int? StrukturOrganisasiId { get; set; }
-        public int? StrataId { get; set; }
-        public string StrukturOrganisasi { get; set; } = null!;
-        public string? PathFoto { set; get; } 
-        public string JenisPengguna { set; get; } = null!;
-        public int JenisPenggunaId { get; set; }
-        public int HakAksesId { get; set; }
+        if (dbUser is null) 
+            throw new Exception("Anda tidak memiliki akses");
+    
+        user.OrangId = dbUser.Id;
+        user.Nama = dbUser.NamaLengkap;
+        user.StrukturOrganisasi = dbUser.JabatanSaatIni;
+        user.JenisPengguna = dbUser.Role;
+        user.Username = dbUser.NipNidn;
+        user.Nip = dbUser.NipNidn;
+        user.PenggunaId = dbUser.Id;
+        user.Roles = await Authorize(user.Username);
+        user.Jwt = GenerateToken(user);
+    
+        return user;
     }
 }

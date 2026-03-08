@@ -9,7 +9,7 @@
    "OutputContextPath": null,
    "OutputPath": "Models\/DBI",
    "PreserveCasingWithRegex": true,
-   "ProjectRootNamespace": "SriPayroll",
+   "ProjectRootNamespace": "Backend",
    "Schemas": null,
    "SelectedHandlebarsLanguage": 2,
    "SelectedToBeGenerated": 0,
