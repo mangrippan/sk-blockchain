@@ -30,6 +30,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddTransient<IAccountService, AccountService>();
+builder.Services.AddSingleton<IBlockchainService, BlockchainService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
