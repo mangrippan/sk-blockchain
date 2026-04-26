@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-vscode.vscode-typescript-next",
+    "bradlc.vscode-tailwindcss",
+    "Vue.volar",
+    "ms-azuretools.vscode-docker",
+    "GitHub.copilot"
+  ]
+}
