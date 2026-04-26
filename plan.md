@@ -1,405 +1,849 @@
-# Rencana Pengembangan Proyek ChainRank
+# Rencana Pengembangan Proyek ChainRank - MVP
 ## Sistem Pencatatan & Verifikasi Kenaikan Pangkat Dosen Berbasis Blockchain Hybrid
+## 🎓 **VERSION: Tugas Kuliah (1 Bulan)**
 
-Dokumen ini berisi peta jalan (roadmap) teknis untuk pembangunan sistem **ChainRank**. Proyek ini menggunakan arsitektur hybrid yang menggabungkan kecepatan database relasional (**PostgreSQL**) dengan integritas data **Hyperledger Fabric**.
-
----
-
-## 📅 Jadwal Pengembangan (Phases)
-
-### Fase 1: Setup Infrastruktur & Lingkungan Dasar
-**Estimasi Waktu:** 2-3 minggu  
-**Resource:** 1 Backend Developer, 1 DevOps Engineer
-
-Fokus pada penyiapan pondasi sistem dan koordinasi antar layanan.
-* [ ] **1.1 Repositori Proyek:** Inisialisasi Git untuk monorepo atau polyrepo (Backend & Frontend).
-* [ ] **1.2 Skema Database Off-Chain:** Implementasi skema PostgreSQL dengan indexing yang optimal (Tabel: `users`, `kegiatan_dosen`, `dokumen_administrasi`, `usulan_pangkat`, `audit_logs`).
-* [ ] **1.3 Fabric Development Network:** Konfigurasi Docker Compose untuk jaringan Hyperledger Fabric development (1 Peer, 1 Orderer, 1 CA) menggunakan Fabric Samples.
-* [ ] **1.4 CI/CD Pipeline:** Setup GitHub Actions untuk automated testing dan build.
-* [ ] **1.5 Environment Configuration:** Setup development, staging, dan production environments.
-
-### Fase 2: Pengembangan Smart Contract (Chaincode)
-**Estimasi Waktu:** 3-4 minggu  
-**Resource:** 2 Blockchain Developers
-
-Membangun logika bisnis utama yang akan berjalan secara on-chain.
-* [ ] **2.1 Inisialisasi Chaincode:** Menggunakan Node.js untuk menulis kontrak pintar dengan structure yang modular.
-* [ ] **2.2 Fungsi Transaksional:** Implementasi fungsi `CatatKegiatan`, `VerifikasiKegiatan`, `TolakKegiatan`, dan `TerbitkanSKPangkat`.
-* [ ] **2.3 Fungsi Audit:** Implementasi fungsi `GetHistori` menggunakan API `getHistoryForKey`.
-* [ ] **2.4 Access Control Logic:** Implementasi attribute-based access control (ABAC) di chaincode level.
-* [ ] **2.5 Unit Testing:** Validasi logika kontrak menggunakan unit test lokal dengan coverage minimal 80%.
-* [ ] **2.6 Chaincode Versioning:** Setup versioning strategy untuk chaincode updates.
-
-### Fase 3: Backend & Mekanisme Integrasi Hybrid
-**Estimasi Waktu:** 4-5 minggu  
-**Resource:** 2 Backend Developers, 1 Security Engineer
-
-Membangun API orkestrator yang menghubungkan SQL dan Blockchain.
-* [ ] **3.1 API Boilerplate:** Setup Express.js dengan TypeScript untuk type safety.
-* [ ] **3.2 Authentication & Authorization:** 
-  - JWT Auth dengan refresh token mechanism
-  - Role-Based Access Control (RBAC) untuk Dosen, Admin, Pimpinan, Super Admin
-  - Password hashing dengan bcrypt (salt rounds: 12)
-  - Session management dengan Redis
-* [ ] **3.3 Modul Kriptografi:** 
-  - Implementasi hash SHA-256 untuk file PDF dan data sensitif
-  - Encryption data sensitif (NIP, NIK) menggunakan AES-256
-  - Private key management untuk Fabric identity
-* [ ] **3.4 Fabric Gateway Client:** Integrasi SDK `fabric-network` dengan connection pooling.
-* [ ] **3.5 Logika Double-Commit:** Implementasi endpoint dengan proteksi transaksi (SQL Rollback jika Fabric gagal).
-* [ ] **3.6 Error Handling:** Centralized error handling middleware dengan proper HTTP status codes.
-* [ ] **3.7 Rate Limiting:** Implementasi rate limiting untuk mencegah abuse.
-* [ ] **3.8 File Upload Handler:** Multer configuration dengan validasi file type, size, dan virus scanning integration.
-* [ ] **3.9 Storage Integration:** 
-  - Setup MinIO (self-hosted S3-compatible storage) atau AWS S3
-  - Implementasi file retention policy (7 tahun sesuai regulasi)
-  - Access control untuk file PDF dengan signed URLs
-* [ ] **3.10 Audit Logging:** Log semua aktivitas sensitif (login, upload, verifikasi, penerbitan SK) ke database.
-
-### Fase 4: Pengembangan Frontend (Vue.js)
-**Estimasi Waktu:** 4-5 minggu  
-**Resource:** 2 Frontend Developers, 1 UI/UX Designer
-
-Membangun antarmuka pengguna yang reaktif dan informatif.
-* [ ] **4.1 Dashboard Dosen:** 
-  - Form input kegiatan dengan validasi real-time
-  - Upload bukti fisik dengan drag & drop support
-  - Monitoring status KUM dengan progress bar
-  - Notifikasi real-time menggunakan WebSocket
-* [ ] **4.2 Fitur Notifikasi KUM:** 
-  - Logika frontend untuk mendeteksi ambang batas poin (200, 400, 550, 850)
-  - Auto-trigger form dokumen pendukung saat threshold tercapai
-  - Email notification integration
-* [ ] **4.3 Dashboard Admin & Pimpinan:** 
-  - Interface review dokumen dengan filtering & sorting
-  - PDF preview dengan annotation tools
-  - Bulk action untuk verifikasi multiple documents
-  - Approval workflow visualization
-* [ ] **4.4 Visualisasi Audit Trail:** 
-  - Timeline component untuk riwayat aset dari blockchain
-  - Export audit log ke PDF/Excel
-  - Real-time hash verification display
-* [ ] **4.5 Security Frontend:** 
-  - Input sanitization untuk mencegah XSS
-  - CSRF token implementation
-  - Secure session storage (HttpOnly cookies)
-* [ ] **4.6 Responsive Design:** Mobile-first approach dengan Tailwind CSS.
-* [ ] **4.7 Accessibility (A11y):** WCAG 2.1 Level AA compliance.
-
-### Fase 5: Pengujian Terintegrasi (Quality Assurance)
-**Estimasi Waktu:** 3-4 minggu  
-**Resource:** 2 QA Engineers, 1 Security Tester
-
-Memastikan sistem tahan terhadap kegagalan dan manipulasi.
-* [ ] **5.1 Unit Testing:** 
-  - Backend: Jest dengan coverage minimal 80%
-  - Frontend: Vitest dengan coverage minimal 75%
-  - Chaincode: Mocha/Chai dengan coverage minimal 80%
-* [ ] **5.2 Integration Testing:** 
-  - API integration tests dengan Supertest
-  - Database integration tests dengan test database
-  - Blockchain integration tests dengan Fabric test network
-* [ ] **5.3 End-to-End (E2E) Testing:** 
-  - Menguji complete user journey dari upload dosen hingga terbit SK
-  - Testing dengan Playwright atau Cypress
-  - Cross-browser testing (Chrome, Firefox, Safari, Edge)
-* [ ] **5.4 Performance Testing:** 
-  - Load testing dengan k6 atau Artillery (target: 100 concurrent users)
-  - Stress testing untuk blockchain throughput (target: 100 TPS)
-  - Database query performance benchmarking
-  - API response time optimization (target: <500ms untuk 95 percentile)
-* [ ] **5.5 Security Testing:** 
-  - Penetration testing
-  - SQL injection & XSS vulnerability scanning
-  - Authentication bypass attempts
-  - File upload security testing
-  - OWASP Top 10 vulnerability check
-* [ ] **5.6 Fault Tolerance Testing:** 
-  - Simulasi kegagalan node blockchain (peer down, orderer down)
-  - SQL Rollback consistency check
-  - Network partition testing
-  - Database connection pool exhaustion
-* [ ] **5.7 Integrity Check:** 
-  - Simulasi modifikasi file manual untuk deteksi perbedaan hash
-  - Blockchain tampering detection
-  - Audit trail immutability verification
-* [ ] **5.8 User Acceptance Testing (UAT):** Testing dengan user representatives dari setiap role.
-
-### Fase 6: Infrastructure Scaling & Production Setup
-**Estimasi Waktu:** 3-4 minggu  
-**Resource:** 2 DevOps Engineers, 1 Backend Developer
-
-* [ ] **6.1 Scalability Implementation:** 
-  - Setup Hyperledger Fabric production network:
-    - Minimal 3 peers untuk redundancy
-    - 3 orderers dengan Raft consensus untuk high availability
-    - Multiple CAs untuk certificate management
-  - Database replication: PostgreSQL primary-replica setup
-  - Load balancer: Nginx atau HAProxy untuk distribute traffic
-  - Horizontal pod autoscaling (HPA) untuk backend services
-* [ ] **6.2 Monitoring & Observability:** 
-  - Prometheus + Grafana untuk metrics monitoring
-  - Loki atau ELK Stack untuk centralized logging
-  - Jaeger atau Zipkin untuk distributed tracing
-  - Alerting rules untuk anomali sistem (Slack/Email integration)
-  - Blockchain network health monitoring dashboard
-  - Database performance monitoring (pg_stat_statements)
-* [ ] **6.3 Backup & Disaster Recovery:** 
-  - PostgreSQL automated backup (daily full + hourly incremental)
-  - Fabric ledger backup strategy
-  - Chaincode backup & versioning
-  - File storage backup (MinIO/S3 cross-region replication)
-  - Define RTO (Recovery Time Objective): 4 hours
-  - Define RPO (Recovery Point Objective): 1 hour
-  - Disaster recovery runbook documentation
-  - Quarterly disaster recovery drill
-* [ ] **6.4 Security Hardening:** 
-  - SSL/TLS certificates (Let's Encrypt atau commercial CA)
-  - Firewall rules & network segmentation
-  - Database encryption at rest
-  - Private key rotation policy
-  - Security patch management process
-  - Intrusion Detection System (IDS) setup
-
-### Fase 7: Finalisasi & Deployment
-**Estimasi Waktu:** 2-3 minggu  
-**Resource:** 2 DevOps Engineers, 1 Backend Developer, 1 Documentation Writer
-
-* [ ] **7.1 Code Quality:** 
-  - Code refactoring dan cleanup
-  - Static code analysis (SonarQube)
-  - Dependency vulnerability scanning (npm audit, Snyk)
-  - Performance optimization (query optimization, caching strategy with Redis)
-* [ ] **7.2 Dokumentasi Teknis:** 
-  - API Documentation dengan Swagger/OpenAPI 3.0
-  - Postman collection untuk API testing
-  - System architecture diagram
-  - Database schema documentation
-  - Chaincode function documentation
-  - Deployment runbook
-  - Troubleshooting guide
-* [ ] **7.3 Dockerization & Orchestration:** 
-  - Docker images untuk semua services (multi-stage builds)
-  - Docker Compose untuk development environment
-  - Kubernetes manifests untuk production (atau Docker Swarm)
-  - Helm charts untuk easy deployment
-  - Container image scanning untuk vulnerabilities
-* [ ] **7.4 CI/CD Pipeline Enhancement:** 
-  - Automated testing di pipeline (unit, integration, E2E)
-  - Automated deployment ke staging setelah merge ke main
-  - Manual approval gate untuk production deployment
-  - Automated rollback mechanism
-  - Blue-green deployment strategy
-* [ ] **7.5 Data Migration (jika ada sistem lama):** 
-  - Extract data dari sistem legacy
-  - Transform data ke format baru
-  - Load data dengan validation checks
-  - Parallel running period: 1 bulan
-  - Cutover planning & execution
-* [ ] **7.6 Production Deployment:** 
-  - Staging deployment & final testing
-  - Production deployment dengan zero-downtime strategy
-  - Smoke testing di production
-  - Performance monitoring post-deployment
-
-### Fase 8: User Training & Go-Live
-**Estimasi Waktu:** 2-3 minggu  
-**Resource:** 1 Project Manager, 2 Trainers, Support Team
-
-* [ ] **8.1 Dokumentasi Pengguna:** 
-  - User manual untuk Dosen (PDF & interactive web version)
-  - User manual untuk Admin
-  - User manual untuk Pimpinan
-  - Quick start guide dengan screenshots
-  - FAQ & troubleshooting guide
-  - Video tutorial untuk setiap user role
-* [ ] **8.2 Training Sessions:** 
-  - Training untuk Dosen (2 sesi)
-  - Training untuk Admin (2 sesi)
-  - Training untuk Pimpinan (1 sesi)
-  - Hands-on workshop
-  - Q&A sessions
-* [ ] **8.3 Soft Launch:** 
-  - Pilot testing dengan selected departments (1-2 minggu)
-  - Collect feedback dan bug reports
-  - Quick fixes untuk critical issues
-* [ ] **8.4 Go-Live Support:** 
-  - Dedicated support team untuk 2 minggu pertama
-  - Hotline & email support
-  - On-site support (jika diperlukan)
-  - Daily monitoring & incident response
-
-### Fase 9: Post-Deployment & Maintenance
-**Estimasi Waktu:** Ongoing  
-**Resource:** 1 Backend Developer, 1 DevOps Engineer, 1 Support Engineer
-
-* [ ] **9.1 Monitoring & Support:** 
-  - 24/7 system monitoring
-  - Incident response team (SLA: <4 hours for critical issues)
-  - Regular system health checks (weekly)
-  - Performance optimization based on usage patterns
-* [ ] **9.2 Maintenance Windows:** 
-  - Monthly maintenance window untuk updates
-  - Security patch application (as needed)
-  - Database maintenance (vacuum, reindex)
-  - Log rotation & cleanup
-* [ ] **9.3 Continuous Improvement:** 
-  - Bug fix procedures (prioritization & sprint planning)
-  - Feature enhancement based on user feedback
-  - Quarterly system performance review
-  - Annual security audit
-* [ ] **9.4 Compliance & Audit:** 
-  - Kesesuaian dengan regulasi kenaikan pangkat Kemendikbud
-  - GDPR/UU PDP compliance check (jika applicable)
-  - Annual compliance audit
-  - Audit trail availability untuk minimum 7 tahun
+> **Note:** Ini adalah versi **Minimum Viable Product (POC)** untuk tugas kuliah. Untuk plan lengkap production-ready, lihat [plan-full.md](plan-full.md).
 
 ---
 
-## 🛠️ Tech Stack
+## 🎯 Tujuan MVP
+Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
+1. ✅ Pencatatan kegiatan dosen ke database PostgreSQL
+2. ✅ Hashing dokumen & penyimpanan hash ke Hyperledger Fabric blockchain
+3. ✅ Verifikasi integritas dokumen melalui hash comparison
+4. ✅ Audit trail sederhana dari blockchain history
+5. ✅ Interface web untuk upload & view data
+
+---
+
+## 📅 Timeline 1 Bulan (4 Minggu)
+
+### **Minggu 1: Setup Infrastruktur & Persiapan** ⚙️
+**Target:** Semua tools & environment siap digunakan
+
+#### Checklist:
+* [ ] **1.1 Setup Repository**
+  - Inisialisasi Git repository
+  - Struktur folder: `/backend`, `/frontend`, `/chaincode`, `/docs`
+  - README.md dengan instruksi setup
+
+* [ ] **1.2 Install & Setup Tools**
+  - Node.js v18+ & npm
+  - PostgreSQL 15
+  - Docker & Docker Compose
+  - VS Code dengan extension (Prettier, ESLint)
+  - Postman untuk testing API
+
+* [ ] **1.3 Database Setup**
+  - Install PostgreSQL
+  - Buat database: `chainrank_db`
+  - Schema sederhana:
+    ```sql
+    -- Tabel users (simplified)
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      nip VARCHAR(50) UNIQUE NOT NULL,
+      nama VARCHAR(200) NOT NULL,
+      email VARCHAR(100) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(20) DEFAULT 'dosen' -- dosen, admin
+    );
+
+    -- Tabel kegiatan_dosen
+    CREATE TABLE kegiatan_dosen (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      jenis_kegiatan VARCHAR(100) NOT NULL,
+      deskripsi TEXT,
+      poin_kum DECIMAL(5,2) NOT NULL,
+      file_name VARCHAR(255),
+      file_hash VARCHAR(64) NOT NULL, -- SHA-256 hash
+      blockchain_tx_id VARCHAR(100), -- Fabric transaction ID
+      status VARCHAR(20) DEFAULT 'pending', -- pending, verified, rejected
+      created_at TIMESTAMP DEFAULT NOW(),
+      verified_at TIMESTAMP
+    );
+    ```
+
+* [ ] **1.4 Hyperledger Fabric Network**
+  - Clone Fabric Samples: `git clone https://github.com/hyperledger/fabric-samples.git`
+  - Download Fabric binaries & Docker images
+  - Start test-network:
+    ```bash
+    cd fabric-samples/test-network
+    ./network.sh up createChannel -c mychannel -ca
+    ```
+  - Pastikan network berjalan dengan benar
+
+---
+
+### **Minggu 2: Backend Development** 💻
+
+#### **2.1 Express.js Backend Setup**
+* [ ] Initialize project: `npm init -y`
+* [ ] Install dependencies:
+  ```bash
+  npm install express cors dotenv pg bcrypt jsonwebtoken multer crypto
+  npm install --save-dev nodemon
+  ```
+* [ ] Struktur folder backend:
+  ```
+  /backend
+    /config       # Database & Fabric connection config
+    /controllers  # Business logic
+    /routes       # API routes
+    /middleware   # Auth middleware
+    /utils        # Helper functions (hash, fabric client)
+    server.js     # Entry point
+  ```
+
+#### **2.2 Core Features Backend**
+* [ ] **Authentication (Sederhana)**
+  - Register endpoint (hash password dengan bcrypt)
+  - Login endpoint (generate JWT token)
+  - Auth middleware untuk protect routes
+
+* [ ] **API Endpoints (Minimal 4)**
+  - `POST /api/kegiatan` - Upload kegiatan + file
+  - `GET /api/kegiatan` - List semua kegiatan user
+  - `GET /api/kegiatan/:id` - Detail kegiatan
+  - `GET /api/kegiatan/:id/audit` - Audit trail dari blockchain
+
+* [ ] **File Upload Handler**
+  - Multer config untuk accept PDF (max 5MB)
+  - Simpan file di `/uploads` folder
+  - Generate SHA-256 hash dari file
+
+* [ ] **Database Connection**
+  - Setup PostgreSQL connection pool (pg)
+  - CRUD operations untuk kegiatan
+
+#### **2.3 Chaincode Development**
+* [ ] **Buat chaincode sederhana** (`/chaincode/kegiatan.js`):
+  ```javascript
+  // Minimal 3 fungsi:
+  // 1. CreateKegiatan(id, hash, metadata)
+  // 2. ReadKegiatan(id)
+  // 3. GetHistory(id) - untuk audit trail
+  ```
+
+* [ ] **Deploy chaincode ke test-network**
+  ```bash
+  # Package
+  peer lifecycle chaincode package kegiatan.tar.gz --path ./chaincode --lang node
+  
+  # Install, approve, commit (ikuti Fabric tutorial)
+  ```
+
+* [ ] **Test chaincode** dengan peer CLI commands
+
+#### **2.4 Fabric SDK Integration**
+* [ ] Install Fabric SDK: `npm install fabric-network`
+* [ ] Buat utility function untuk:
+  - Connect ke Fabric gateway
+  - Submit transaction (untuk write)
+  - Evaluate transaction (untuk read)
+  - Get transaction history
+
+* [ ] **Implement Double-Commit Pattern**
+  ```javascript
+  // Pseudocode:
+  async function createKegiatan(data) {
+    const dbClient = await pool.connect();
+    try {
+      await dbClient.query('BEGIN');
+      
+      // 1. Insert to PostgreSQL
+      const result = await dbClient.query('INSERT INTO kegiatan...');
+      
+      // 2. Submit to Blockchain
+      const txId = await fabricClient.submitTransaction('CreateKegiatan', ...);
+      
+      // 3. Update txId in database
+      await dbClient.query('UPDATE kegiatan SET blockchain_tx_id = $1...', [txId]);
+      
+      await dbClient.query('COMMIT');
+      return result;
+    } catch (error) {
+      await dbClient.query('ROLLBACK');
+      throw error;
+    }
+  }
+  ```
+
+---
+
+### **Minggu 3: Frontend Development** 🎨
+
+#### **3.1 Vue.js Setup**
+* [ ] Create Vue project:
+  ```bash
+  npm create vue@latest
+  # Select: TypeScript (No), Pinia (Yes), Router (Yes)
+  ```
+* [ ] Install dependencies:
+  ```bash
+  npm install axios tailwindcss @tailwindcss/forms
+  ```
+* [ ] Configure Tailwind CSS
+
+#### **3.2 Pages (Minimal 3)**
+* [ ] **Login Page** (`/login`)
+  - Form login sederhana
+  - Simpan JWT token di localStorage
+
+* [ ] **Dashboard Dosen** (`/dashboard`)
+  - Form upload kegiatan:
+    - Input: Jenis Kegiatan (dropdown)
+    - Input: Deskripsi (textarea)
+    - Input: Poin KUM (number)
+    - Upload File PDF
+    - Button Submit
+  - Tabel list kegiatan dengan kolom:
+    - Jenis Kegiatan, Poin, Status, Tanggal
+    - Action: View Detail
+
+* [ ] **Detail Kegiatan** (`/kegiatan/:id`)
+  - Info kegiatan lengkap
+  - File PDF preview (atau download link)
+  - **Hash Verification Section:**
+    - Display: Hash Tersimpan
+    - Display: Hash dari Blockchain
+    - Status: ✅ Valid / ❌ Tampered
+  - **Audit Trail Timeline:**
+    - Tampilkan history dari blockchain
+    - Format: Timestamp, Action, User
+
+#### **3.3 Components**
+* [ ] `Navbar.vue` - Simple navigation
+* [ ] `UploadForm.vue` - Reusable upload form
+* [ ] `KegiatanTable.vue` - Tabel kegiatan
+* [ ] `AuditTrail.vue` - Timeline component untuk history
+
+#### **3.4 State Management (Pinia)**
+* [ ] Store untuk authentication (`auth.store.js`)
+* [ ] Store untuk kegiatan data (`kegiatan.store.js`)
+
+#### **3.5 Integration**
+* [ ] Axios interceptor untuk JWT token
+* [ ] API calls ke backend
+* [ ] Error handling & loading states
+
+---
+
+### **Minggu 4: Testing, Documentation & Finalisasi** 📝
+
+#### **4.1 Manual Testing**
+* [ ] **Test Flow Lengkap:**
+  1. Register user baru
+  2. Login
+  3. Upload kegiatan dengan file PDF
+  4. Cek data masuk ke PostgreSQL
+  5. Cek hash tersimpan di blockchain (via peer CLI atau API)
+  6. View audit trail
+  7. Simulasi: Edit file PDF manual → verify hash → detect tampering
+
+* [ ] **Test Edge Cases:**
+  - Upload file non-PDF (harus ditolak)
+  - Upload file >5MB (harus ditolak)
+  - Login dengan password salah
+  - Akses endpoint tanpa token
+
+#### **4.2 Bug Fixing**
+* [ ] Fix critical bugs yang ditemukan saat testing
+* [ ] Improve error messages
+* [ ] Handle edge cases
+
+#### **4.3 Code Cleanup**
+* [ ] Hapus console.log() yang tidak perlu
+* [ ] Format code dengan Prettier
+* [ ] Add comments untuk code yang kompleks
+
+#### **4.4 Documentation**
+
+* [ ] **README.md** dengan:
+  - Deskripsi proyek
+  - Architecture diagram (simple)
+  - Prerequisites & Installation steps
+  - How to run (step-by-step)
+  - API documentation (endpoint list)
+  - Screenshots
+
+* [ ] **Dokumentasi Tugas:**
+  - Laporan (Word/PDF):
+    - Pendahuluan & Latar Belakang
+    - Landasan Teori (Blockchain, Hyperledger Fabric)
+    - Arsitektur Sistem (diagram)
+    - Implementasi (dengan code snippets)
+    - Testing & Hasil
+    - Kesimpulan & Saran
+  - Slide Presentasi (PPT):
+    - 10-15 slides
+    - Fokus pada konsep & demo
+
+* [ ] **Video Demo (5-10 menit):**
+  - Screen recording demo aplikasi
+  - Narasi menjelaskan fitur
+  - Tunjukkan audit trail & hash verification
+
+#### **4.5 Deployment Preparation** (Optional)
+* [ ] Docker Compose untuk easy setup:
+  ```yaml
+  # docker-compose.yml
+  services:
+    postgres:
+      image: postgres:15
+      # ... config
+    
+    backend:
+      build: ./backend
+      # ... config
+    
+    frontend:
+      build: ./frontend
+      # ... config
+  ```
+* [ ] `.env.example` untuk environment variables
+* [ ] Deployment instructions
+
+---
+
+## 🛠️ Tech Stack (Simplified)
 
 ### Frontend
-* **Framework:** Vue.js 3 (Composition API)
-* **State Management:** Pinia
-* **Styling:** Tailwind CSS
-* **HTTP Client:** Axios
-* **Real-time Communication:** Socket.io Client
-* **Form Validation:** Vee-Validate + Yup
-* **Testing:** Vitest, Playwright/Cypress
-* **Build Tool:** Vite
+* Vue.js 3 (Composition API)
+* Pinia (state management)
+* Tailwind CSS
+* Axios
 
 ### Backend
-* **Runtime:** Node.js (LTS v20+)
-* **Framework:** Express.js dengan TypeScript
-* **Authentication:** JWT (jsonwebtoken), bcrypt
-* **ORM:** Sequelize atau Prisma
-* **Validation:** Joi atau Zod
-* **File Upload:** Multer
-* **Real-time:** Socket.io
-* **Caching:** Redis
-* **Task Queue:** Bull (untuk background jobs)
-* **Testing:** Jest, Supertest
+* Node.js + Express.js
+* PostgreSQL (dengan pg driver)
+* Multer (file upload)
+* JWT (authentication)
+* bcrypt (password hashing)
 
 ### Blockchain
-* **Platform:** Hyperledger Fabric v2.5+
-* **SDK:** fabric-network (Node.js SDK)
-* **State Database:** CouchDB (untuk rich queries)
-* **Chaincode:** Node.js (JavaScript/TypeScript)
-* **Certificate Authority:** Fabric CA
-* **Consensus:** Raft (untuk Orderer)
-
-### Database
-* **Primary:** PostgreSQL 15+
-* **Connection Pool:** pg-pool
-* **Migration:** Sequelize migrations atau Prisma Migrate
-* **Backup:** pg_dump, WAL archiving
-
-### Storage
-* **Object Storage:** MinIO (self-hosted S3-compatible) atau AWS S3
-* **CDN:** Cloudflare atau AWS CloudFront (untuk static assets)
-* **File Retention:** 7 tahun (compliance requirement)
-
-### DevOps & Infrastructure
-* **Containerization:** Docker, Docker Compose
-* **Orchestration:** Kubernetes atau Docker Swarm
-* **CI/CD:** GitHub Actions atau GitLab CI
-* **Monitoring:** Prometheus, Grafana
-* **Logging:** Loki atau ELK Stack (Elasticsearch, Logstash, Kibana)
-* **Tracing:** Jaeger atau Zipkin
-* **Load Balancer:** Nginx atau HAProxy
-* **Reverse Proxy:** Nginx
-* **SSL/TLS:** Let's Encrypt
-
-### Security
-* **Encryption:** AES-256 (data at rest), TLS 1.3 (data in transit)
-* **Secrets Management:** HashiCorp Vault atau AWS Secrets Manager
-* **Vulnerability Scanning:** Snyk, npm audit, Trivy (container scanning)
-* **Firewall:** iptables, cloud provider security groups
+* Hyperledger Fabric (test-network dari fabric-samples)
+* Fabric SDK for Node.js
+* Chaincode: Node.js
+* 1 Channel, 1 Peer, 1 Orderer (cukup untuk POC)
 
 ### Development Tools
-* **Version Control:** Git (GitHub atau GitLab)
-* **Code Quality:** ESLint, Prettier, SonarQube
-* **API Documentation:** Swagger/OpenAPI 3.0
-* **API Testing:** Postman, Insomnia
-* **Load Testing:** k6, Artillery
+* Git & GitHub
+* Postman (API testing)
+* VS Code
+* Docker
 
 ---
 
-## 📊 Timeline Summary
+## 📊 Minimal Features Checklist
 
-| Fase | Durasi | Kumulatif |
-|------|--------|----------|
-| Fase 1: Setup Infrastruktur | 2-3 minggu | 3 minggu |
-| Fase 2: Smart Contract | 3-4 minggu | 7 minggu |
-| Fase 3: Backend & Integration | 4-5 minggu | 12 minggu |
-| Fase 4: Frontend Development | 4-5 minggu | 17 minggu |
-| Fase 5: QA & Testing | 3-4 minggu | 21 minggu |
-| Fase 6: Infrastructure Scaling | 3-4 minggu | 25 minggu |
-| Fase 7: Finalisasi & Deployment | 2-3 minggu | 28 minggu |
-| Fase 8: User Training & Go-Live | 2-3 minggu | 31 minggu |
-| **Total Estimasi** | **~7-8 bulan** | |
+### Must Have (P0) - Wajib ada untuk lulus
+- [x] Database PostgreSQL dengan minimal 2 tabel
+- [x] Backend API dengan minimal 4 endpoints
+- [x] File upload & SHA-256 hashing
+- [x] Integration dengan Hyperledger Fabric (submit & read)
+- [x] Frontend web dengan minimal 3 halaman
+- [x] Authentication sederhana (login/register)
+- [x] Audit trail dari blockchain
+- [x] Hash verification demo
 
-## 👥 Resource Requirements
+### Nice to Have (P1) - Nilai tambah
+- [ ] Pretty UI/UX dengan Tailwind
+- [ ] Real-time notification
+- [ ] Export data ke PDF/Excel
+- [ ] Advanced filtering & search
+- [ ] Dashboard statistics (chart)
 
-* **Backend Developers:** 2 (full-time)
-* **Blockchain Developers:** 2 (full-time)
-* **Frontend Developers:** 2 (full-time)
-* **DevOps Engineers:** 2 (full-time)
-* **QA Engineers:** 2 (full-time)
-* **Security Engineer:** 1 (part-time/consultant)
-* **UI/UX Designer:** 1 (part-time)
-* **Project Manager:** 1 (full-time)
-* **Documentation Writer:** 1 (part-time)
-* **Support Team:** 2-3 (post go-live)
-
-## 🎯 Success Metrics (KPI)
-
-### Performance
-* API response time: <500ms (95th percentile)
-* Page load time: <2s
-* Blockchain transaction throughput: >100 TPS
-* System uptime: 99.9% (target SLA)
-
-### Quality
-* Code coverage: >80% (backend, chaincode), >75% (frontend)
-* Critical bugs in production: <5 per quarter
-* Security vulnerabilities: Zero high/critical severity
-
-### User Adoption
-* User training completion: >95%
-* User satisfaction score: >4.0/5.0
-* Support ticket resolution: <24 hours (non-critical), <4 hours (critical)
-
-## ⚠️ Risk Mitigation
-
-| Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|------------|
-| Blockchain performance bottleneck | High | Medium | Early performance testing, optimize chaincode queries, consider private data collections |
-| Security breach | High | Low | Regular security audits, penetration testing, security-first development |
-| Data migration failure | High | Medium | Extensive testing, parallel running, rollback plan |
-| Integration complexity | Medium | High | Early POC, modular architecture, comprehensive testing |
-| User adoption resistance | Medium | Medium | Early user involvement, comprehensive training, change management |
-| Scope creep | Medium | High | Clear requirements, change control process, agile sprints |
-
-## 📚 Compliance & Legal Considerations
-
-* **Regulasi Kenaikan Pangkat:** Kesesuaian dengan Permenristekdikti/Permendikbud terkait kenaikan pangkat dosen
-* **Data Privacy:** Compliance dengan UU PDP (Perlindungan Data Pribadi) Indonesia
-* **Data Retention:** Audit trail minimum 7 tahun sesuai regulasi arsip nasional
-* **Digital Signature:** Integrasi tanda tangan digital yang sah (jika diperlukan)
-* **Audit Requirements:** Sistem harus dapat diaudit oleh inspektorat perguruan tinggi
+### Can Skip (P2) - Tidak perlu untuk tugas kuliah
+- [ ] Multiple user roles dengan permission
+- [ ] Email notification
+- [ ] Production deployment
+- [ ] Advanced security (rate limiting, CSRF, etc)
+- [ ] Monitoring & logging
+- [ ] CI/CD pipeline
 
 ---
 
-## 📝 Notes
+## 🎯 Success Criteria
 
-* Estimasi waktu dapat berubah berdasarkan kompleksitas implementasi dan feedback dari stakeholder
-* Resource allocation dapat disesuaikan berdasarkan prioritas dan budget
-* Dokumentasi ini akan di-review setiap akhir sprint (2 minggu)
-* Change requests harus melalui formal change control process
+Tugas kuliah dianggap **berhasil** jika:
+
+1. ✅ Aplikasi bisa running (frontend + backend + blockchain)
+2. ✅ User bisa upload kegiatan dengan file PDF
+3. ✅ Hash file tersimpan di blockchain (bisa dibuktikan)
+4. ✅ Bisa menampilkan audit trail dari blockchain
+5. ✅ Bisa detect jika file sudah diubah (hash berbeda)
+6. ✅ Ada dokumentasi lengkap (laporan + slide + demo video)
+7. ✅ Code di-push ke GitHub repository
 
 ---
 
-*Dokumen ini bersifat dinamis dan akan diperbarui sesuai dengan progres pengembangan proyek.*  
+## 💡 Tips Pengerjaan
+
+### Week 1
+- **Jangan stuck di setup terlalu lama!** Jika Fabric susah, gunakan `fabric-samples/test-network` as-is
+- Prioritas: Setup environment dulu baru coding
+
+### Week 2
+- **Backend dulu, frontend kemudian.** Test API dengan Postman dulu sebelum bikin UI
+- **Chaincode sesederhana mungkin.** 3 fungsi cukup: Create, Read, GetHistory
+- Gunakan template/boilerplate jika ada untuk save time
+
+### Week 3
+- **UI tidak perlu fancy.** Tailwind basic components sudah cukup
+- Focus on functionality, bukan design
+- Copy-paste component dari template jika perlu (credit the source)
+
+### Week 4
+- **Testing & documentation sama pentingnya dengan coding!**
+- Record demo video dari awal, jadi ada backup jika ada bug mendadak
+- Prepare laporan sambil coding (jangan di minggu terakhir)
+
+### General
+- **Commit & push code setiap hari** ke GitHub (backup + proof of work)
+- **Ask for help early** jika stuck >2 jam di satu masalah
+- **Focus on MVP** - fitur tambahan nanti saja kalau ada waktu
+- **Pair programming** dengan teman jika memungkinkan
+
+---
+
+## � Migration Strategy: MVP → Production
+
+### **Design Principles untuk Future-Proofing** ⚠️ PENTING!
+
+Agar bisa smooth transition dari MVP ke production, **ikuti principles ini sejak awal:**
+
+#### **1. Modular Architecture**
+```
+/backend
+  /config        # All configurations (DB, Fabric, etc)
+  /controllers   # Business logic (thin controllers)
+  /services      # Core logic (thick services) ← PENTING!
+  /models        # Database models/schemas
+  /routes        # API routes
+  /middleware    # Reusable middleware
+  /utils         # Helper functions
+  /validators    # Input validation
+```
+
+**✅ DO:**
+- Pisahkan business logic ke `/services`
+- Controllers hanya handle request/response
+- Services bisa dipanggil dari mana saja (reusable)
+
+**❌ DON'T:**
+- Campur business logic di controller
+- Hardcode values (gunakan config/env)
+- Buat spaghetti code
+
+#### **2. Database Schema - Extensible Design**
+
+**✅ Tambahkan kolom ini SEJAK AWAL** (walaupun belum dipakai):
+```sql
+-- users table
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  nip VARCHAR(50) UNIQUE NOT NULL,
+  nama VARCHAR(200) NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(20) DEFAULT 'dosen',
+  
+  -- Columns untuk future (isi NULL dulu ok)
+  department VARCHAR(100),
+  jabatan VARCHAR(50),
+  is_active BOOLEAN DEFAULT true,
+  last_login TIMESTAMP,
+  
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  deleted_at TIMESTAMP  -- Soft delete
+);
+
+-- kegiatan_dosen table
+CREATE TABLE kegiatan_dosen (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  jenis_kegiatan VARCHAR(100) NOT NULL,
+  deskripsi TEXT,
+  poin_kum DECIMAL(5,2) NOT NULL,
+  file_name VARCHAR(255),
+  file_path VARCHAR(500),  -- Full path to file
+  file_hash VARCHAR(64) NOT NULL,
+  blockchain_tx_id VARCHAR(100),
+  
+  status VARCHAR(20) DEFAULT 'pending',
+  verified_by INTEGER REFERENCES users(id),  -- Siapa yang verify
+  verified_at TIMESTAMP,
+  rejection_reason TEXT,  -- Jika ditolak
+  
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  deleted_at TIMESTAMP
+);
+
+-- Audit logs table (tambahkan sejak awal!)
+CREATE TABLE audit_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  action VARCHAR(50) NOT NULL,  -- 'CREATE', 'UPDATE', 'DELETE', 'VERIFY'
+  table_name VARCHAR(50) NOT NULL,
+  record_id INTEGER NOT NULL,
+  old_values JSONB,
+  new_values JSONB,
+  ip_address VARCHAR(50),
+  user_agent TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Index untuk performance (wajib!)
+CREATE INDEX idx_kegiatan_user_id ON kegiatan_dosen(user_id);
+CREATE INDEX idx_kegiatan_status ON kegiatan_dosen(status);
+CREATE INDEX idx_audit_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_created_at ON audit_logs(created_at);
+```
+
+#### **3. Configuration Management**
+
+**✅ Gunakan Environment Variables sejak awal:**
+```javascript
+// config/database.js
+module.exports = {
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'chainrank_db',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD,
+  max: process.env.DB_POOL_SIZE || 10  // Connection pool
+};
+
+// config/fabric.js
+module.exports = {
+  channelName: process.env.FABRIC_CHANNEL || 'mychannel',
+  chaincodeName: process.env.FABRIC_CHAINCODE || 'kegiatan',
+  mspId: process.env.FABRIC_MSP_ID || 'Org1MSP',
+  // ... etc
+};
+```
+
+**File `.env`:**
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=chainrank_db
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+
+# JWT
+JWT_SECRET=your-secret-key-change-in-production
+JWT_EXPIRES_IN=24h
+
+# File Upload
+MAX_FILE_SIZE=5242880  # 5MB
+UPLOAD_DIR=./uploads
+
+# Fabric
+FABRIC_CHANNEL=mychannel
+FABRIC_CHAINCODE=kegiatan
+
+# Server
+PORT=3000
+NODE_ENV=development
+```
+
+#### **4. API Design - RESTful & Versioned**
+
+**✅ Gunakan API versioning sejak awal:**
+```javascript
+// routes/index.js
+const express = require('express');
+const router = express.Router();
+
+// Version 1 routes
+router.use('/api/v1/auth', require('./v1/auth'));
+router.use('/api/v1/kegiatan', require('./v1/kegiatan'));
+router.use('/api/v1/users', require('./v1/users'));
+
+module.exports = router;
+```
+
+**Konsisten dengan naming:**
+- `GET /api/v1/kegiatan` - List all
+- `GET /api/v1/kegiatan/:id` - Get one
+- `POST /api/v1/kegiatan` - Create
+- `PUT /api/v1/kegiatan/:id` - Update
+- `DELETE /api/v1/kegiatan/:id` - Delete
+- `GET /api/v1/kegiatan/:id/audit` - Audit trail
+
+#### **5. Error Handling - Centralized**
+
+**✅ Buat error handler dari awal:**
+```javascript
+// utils/errorHandler.js
+class AppError extends Error {
+  constructor(message, statusCode) {
+    super(message);
+    this.statusCode = statusCode;
+    this.isOperational = true;
+  }
+}
+
+// middleware/errorHandler.js
+module.exports = (err, req, res, next) => {
+  err.statusCode = err.statusCode || 500;
+  err.status = err.status || 'error';
+
+  if (process.env.NODE_ENV === 'development') {
+    res.status(err.statusCode).json({
+      status: err.status,
+      error: err,
+      message: err.message,
+      stack: err.stack
+    });
+  } else {
+    // Production - don't leak error details
+    res.status(err.statusCode).json({
+      status: err.status,
+      message: err.message
+    });
+  }
+};
+```
+
+#### **6. Chaincode - Extensible Functions**
+
+**✅ Structure chaincode dengan baik:**
+```javascript
+// chaincode/lib/kegiatan.js
+class KegiatanContract extends Contract {
+  
+  // CRUD operations
+  async createKegiatan(ctx, id, data) { }
+  async readKegiatan(ctx, id) { }
+  async updateKegiatan(ctx, id, data) { }
+  async deleteKegiatan(ctx, id) { }
+  
+  // Query operations
+  async queryKegiatanByUser(ctx, userId) { }
+  async queryKegiatanByStatus(ctx, status) { }
+  
+  // Audit
+  async getHistory(ctx, id) { }
+  
+  // Future: Access control
+  async _checkPermission(ctx, action, resourceId) {
+    // Implement later
+    return true;
+  }
+}
+```
+
+#### **7. Frontend - Component-Based**
+
+**✅ Buat reusable components:**
+```
+/frontend/src
+  /components
+    /common
+      Button.vue
+      Input.vue
+      Modal.vue
+      Table.vue
+    /kegiatan
+      KegiatanForm.vue
+      KegiatanTable.vue
+      KegiatanDetail.vue
+    /audit
+      AuditTrail.vue
+  /views
+    Dashboard.vue
+    KegiatanList.vue
+    KegiatanDetail.vue
+  /stores
+    auth.js
+    kegiatan.js
+  /services
+    api.js  ← Centralized API calls
+  /utils
+    validators.js
+    formatters.js
+```
+
+---
+
+### **Migration Path: MVP → Full Production**
+
+Ketika MVP selesai dan mau scale up, ikuti step ini:
+
+#### **Phase 1: Security Enhancement** (Week 1-2)
+- [ ] Add rate limiting (express-rate-limit)
+- [ ] Implement RBAC (role-based access control)
+- [ ] Add CSRF protection
+- [ ] Setup HTTPS/SSL
+- [ ] Add input sanitization
+- [ ] Implement refresh token mechanism
+
+#### **Phase 2: Scalability** (Week 3-4)
+- [ ] Scale Fabric network (3 peers, 3 orderers)
+- [ ] Setup PostgreSQL replication
+- [ ] Add Redis for caching & sessions
+- [ ] Implement load balancer (Nginx)
+- [ ] Setup CDN untuk static files
+
+#### **Phase 3: Observability** (Week 5-6)
+- [ ] Add Prometheus + Grafana
+- [ ] Centralized logging (Winston + Loki)
+- [ ] Error tracking (Sentry)
+- [ ] Add health check endpoints
+- [ ] Setup alerting rules
+
+#### **Phase 4: Advanced Features** (Week 7-8)
+- [ ] Multiple user roles dengan permissions
+- [ ] Email notifications (Nodemailer)
+- [ ] Real-time updates (WebSocket)
+- [ ] Export to PDF/Excel
+- [ ] Advanced search & filtering
+
+#### **Phase 5: DevOps** (Week 9-10)
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Docker Compose production setup
+- [ ] Kubernetes manifests
+- [ ] Automated testing in pipeline
+- [ ] Blue-green deployment
+
+---
+
+### **What NOT to Do in MVP** ❌
+
+Jangan lakukan ini karena akan **SULIT untuk migrate** nanti:
+
+1. **❌ Hardcode credentials** di code
+   - ✅ Selalu gunakan `.env`
+
+2. **❌ Campur concerns** (business logic di controller)
+   - ✅ Pisahkan ke services layer
+
+3. **❌ Skip database indexes**
+   - ✅ Tambahkan index sejak awal
+
+4. **❌ Buat tight coupling** antara components
+   - ✅ Dependency injection & interfaces
+
+5. **❌ Ignore error handling**
+   - ✅ Centralized error handler
+
+6. **❌ Buat monolithic functions** (1 function 500 lines)
+   - ✅ Small, focused functions
+
+7. **❌ Skip git commits**
+   - ✅ Commit setiap fitur selesai
+
+8. **❌ No documentation**
+   - ✅ Comment code yang kompleks, update README
+
+---
+
+### **Quality Checklist Before Migration** ✅
+
+Sebelum migrate ke production, pastikan MVP punya:
+
+**Code Quality:**
+- [ ] No console.log() in production code (use logger)
+- [ ] All secrets in .env, not hardcoded
+- [ ] Error handling di semua async functions
+- [ ] Input validation di semua endpoints
+- [ ] SQL injection prevention (parameterized queries)
+
+**Architecture:**
+- [ ] Clear separation of concerns (MVC/Service pattern)
+- [ ] Reusable components/functions
+- [ ] Config-driven, not code-driven
+- [ ] Database migrations (bukan manual ALTER TABLE)
+
+**Testing:**
+- [ ] Minimal manual testing checklist documented
+- [ ] Happy path tested
+- [ ] Error scenarios tested
+- [ ] Edge cases identified (even if not all tested)
+
+**Documentation:**
+- [ ] README with setup instructions
+- [ ] API endpoints documented
+- [ ] Database schema documented
+- [ ] `.env.example` file exists
+
+**Security Basics:**
+- [ ] Passwords hashed (bcrypt)
+- [ ] JWT tokens untuk auth
+- [ ] File upload validation (type, size)
+- [ ] No sensitive data in logs
+
+---
+
+## 🚀 Next Steps (Setelah Tugas Selesai)
+
+Jika ingin lanjutkan jadi production app, lihat [plan-full.md](plan-full.md) untuk:
+- Security hardening
+- Scalability (multiple peers, load balancing)
+- Advanced features (multiple roles, notifications, etc)
+- Monitoring & observability
+- Deployment strategy
+- Dan masih banyak lagi...
+
+**Dengan mengikuti design principles di atas, migration akan 10x lebih mudah!** 🎯
+
+---
+
+## 📚 Resources & Learning Materials
+
+### Hyperledger Fabric
+- [Official Fabric Docs](https://hyperledger-fabric.readthedocs.io/)
+- [Fabric Samples GitHub](https://github.com/hyperledger/fabric-samples)
+- Tutorial: "Writing Your First Application" (wajib dibaca!)
+
+### Node.js & Express
+- [Express.js Guide](https://expressjs.com/en/guide/routing.html)
+- [Node.js Best Practices](https://github.com/goldbergyoni/nodebestpractices)
+
+### Vue.js
+- [Vue 3 Official Docs](https://vuejs.org/)
+- [Pinia Documentation](https://pinia.vuejs.org/)
+
+### PostgreSQL
+- [PostgreSQL Tutorial](https://www.postgresqltutorial.com/)
+
+---
+
+## ⚠️ Common Pitfalls & How to Avoid
+
+1. **Fabric network tidak start**
+   - Pastikan Docker running
+   - Check Docker memory allocation (min 4GB)
+   - Baca error log dengan teliti
+
+2. **CORS error di frontend**
+   - Install `cors` package di backend
+   - Configure properly: `app.use(cors())`
+
+3. **JWT token tidak terkirim**
+   - Check axios interceptor
+   - Verify header format: `Authorization: Bearer <token>`
+
+4. **File upload failed**
+   - Check Multer configuration
+   - Verify frontend sends `FormData`, bukan JSON
+
+5. **Blockchain transaction failed**
+   - Check chaincode installed & approved
+   - Verify channel name & chaincode name match
+   - Check Fabric connection profile
+
+---
+
+*Dokumen ini adalah versi simplified untuk tugas kuliah 1 bulan.*  
+*Untuk production planning, refer to [plan-full.md](plan-full.md)*  
 *Last Updated: April 26, 2026*  
-*Version: 2.0*
+*Version: MVP 1.0*
