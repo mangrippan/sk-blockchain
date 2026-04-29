@@ -6,10 +6,52 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
 const { testConnection } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ============================================
+// SWAGGER CONFIGURATION
+// ============================================
+
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'ChainRank API Documentation',
+      version: '1.0.0',
+      description: 'Backend API for ChainRank - Blockchain-based Academic Promotion Tracking System',
+      contact: {
+        name: 'API Support',
+        email: 'support@chainrank.com',
+      },
+    },
+    servers: [
+      {
+        url: 'http://localhost:3000',
+        description: 'Development Server',
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+    security: [{
+      bearerAuth: [],
+    }],
+  },
+  apis: ['./routes/v1/*.js', './server.js'], // Path to API docs
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 // ============================================
 // MIDDLEWARE
@@ -35,7 +77,40 @@ app.use((req, res, next) => {
 // ROUTES
 // ============================================
 
-// Health check endpoint
+// Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'ChainRank API Documentation',
+}));
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check endpoint
+ *     description: Returns server health status and uptime
+ *     tags: [System]
+ *     responses:
+ *       200:
+ *         description: Server is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 uptime:
+ *                   type: number
+ *                   description: Server uptime in seconds
+ *                 environment:
+ *                   type: string
+ *                   example: development
+ */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -112,6 +187,7 @@ async function startServer() {
       console.log('');
       console.log('Available endpoints:');
       console.log(`  GET  /health          - Health check`);
+      console.log(`  GET  /api-docs        - API Documentation (Swagger UI)`);
       console.log(`  POST /api/v1/auth/login - User login`);
       console.log(`  POST /api/v1/auth/register - User registration`);
       console.log('');
