@@ -16,6 +16,9 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  
+  // Set default schema untuk hybrid schema
+  options: '-c search_path=sk,public',
 });
 
 // Test connection on startup
@@ -34,6 +37,19 @@ const testConnection = async () => {
     const client = await pool.connect();
     const result = await client.query('SELECT NOW()');
     console.log('🕐 Database server time:', result.rows[0].now);
+    
+    // Test schema accessibility
+    const schemaTest = await client.query(`
+      SELECT schema_name FROM information_schema.schemata 
+      WHERE schema_name = 'sk'
+    `);
+    
+    if (schemaTest.rows.length > 0) {
+      console.log('✅ Schema "sk" is accessible');
+    } else {
+      console.warn('⚠️  Schema "sk" not found. Run: node database/setup-database.js');
+    }
+    
     client.release();
     return true;
   } catch (err) {
