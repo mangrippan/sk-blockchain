@@ -29,10 +29,35 @@ Jika MVP belum selesai atau tidak mengikuti best practices, **fix dulu sebelum l
 
 Fokus pada penyiapan pondasi sistem dan koordinasi antar layanan.
 * [ ] **1.1 Repositori Proyek:** Inisialisasi Git untuk monorepo atau polyrepo (Backend & Frontend).
-* [ ] **1.2 Skema Database Off-Chain:** Implementasi skema PostgreSQL dengan indexing yang optimal (Tabel: `users`, `kegiatan_dosen`, `dokumen_administrasi`, `usulan_pangkat`, `audit_logs`).
+* [ ] **1.2 Skema Database Off-Chain:** Implementasi skema PostgreSQL dengan indexing yang optimal (Tabel: `users`, `kegiatan_dosen`, `dokumen_administrasi`, `usulan_pangkat`, `audit_logs`, `pending_blockchain_sync`).
+  - **Gunakan 1 schema file canonical** (`database/schema.sql`), archive sisanya
+  - Tambahkan tabel `pending_blockchain_sync` untuk compensation mechanism:
+    ```sql
+    CREATE TABLE pending_blockchain_sync (
+      id SERIAL PRIMARY KEY,
+      kegiatan_id INTEGER REFERENCES kegiatan_dosen(id),
+      blockchain_tx_id VARCHAR(100),
+      status VARCHAR(20) DEFAULT 'pending',
+      retry_count INTEGER DEFAULT 0,
+      error_message TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      synced_at TIMESTAMP
+    );
+    ```
 * [ ] **1.3 Fabric Development Network:** Konfigurasi Docker Compose untuk jaringan Hyperledger Fabric development (1 Peer, 1 Orderer, 1 CA) menggunakan Fabric Samples.
 * [ ] **1.4 CI/CD Pipeline:** Setup GitHub Actions untuk automated testing dan build.
 * [ ] **1.5 Environment Configuration:** Setup development, staging, dan production environments.
+  - Tambahkan env validation di startup:
+    ```javascript
+    const required = ['DB_HOST', 'DB_PASSWORD', 'JWT_SECRET', 'FABRIC_CHANNEL'];
+    required.forEach(key => {
+      if (!process.env[key]) { console.error(`Missing: ${key}`); process.exit(1); }
+    });
+    ```
+* [ ] **1.6 Seed Data:** Buat seed script (`database/seed.js`) untuk development & demo:
+  - Users sample (dosen, admin, pimpinan)
+  - Kegiatan sample dengan berbagai status
+  - Data referensi jenis kegiatan & poin KUM
 
 ### Fase 2: Pengembangan Smart Contract (Chaincode)
 **Estimasi Waktu:** 3-4 minggu  
@@ -63,9 +88,14 @@ Membangun API orkestrator yang menghubungkan SQL dan Blockchain.
   - Private key management untuk Fabric identity
 * [ ] **3.4 Fabric Gateway Client:** Integrasi SDK `fabric-network` dengan connection pooling.
 * [ ] **3.5 Logika Double-Commit:** Implementasi endpoint dengan proteksi transaksi (SQL Rollback jika Fabric gagal).
+  - **Compensation mechanism:** Jika Fabric sukses tapi DB update gagal, log ke `pending_blockchain_sync` dan retry via background job
+  - **Fallback mode:** Jika Fabric network down, simpan data di DB saja dengan `status = 'pending_blockchain'` dan sync nanti
+* [ ] **3.5.1 Health Check Endpoint:**
+  - `GET /api/v1/health` — status DB, Fabric network, uptime, version
+  - Digunakan oleh monitoring dan sebagai quick-check saat demo/deployment
 * [ ] **3.6 Error Handling:** Centralized error handling middleware dengan proper HTTP status codes.
 * [ ] **3.7 Rate Limiting:** Implementasi rate limiting untuk mencegah abuse.
-* [ ] **3.8 File Upload Handler:** Multer configuration dengan validasi file type, size, dan virus scanning integration.
+* [ ] **3.8 File Upload Handler:** Multer configuration dengan validasi file type (magic bytes, bukan hanya extension), size, dan virus scanning integration.
 * [ ] **3.9 Storage Integration:** 
   - Setup MinIO (self-hosted S3-compatible storage) atau AWS S3
   - Implementasi file retention policy (7 tahun sesuai regulasi)
@@ -133,6 +163,8 @@ Memastikan sistem tahan terhadap kegagalan dan manipulasi.
 * [ ] **5.6 Fault Tolerance Testing:** 
   - Simulasi kegagalan node blockchain (peer down, orderer down)
   - SQL Rollback consistency check
+  - **Compensation mechanism testing:** Fabric sukses tapi DB gagal → verify pending_blockchain_sync retry
+  - **Fallback mode testing:** Fabric down → verify database-only mode works → verify sync saat Fabric kembali
   - Network partition testing
   - Database connection pool exhaustion
 * [ ] **5.7 Integrity Check:** 
@@ -417,5 +449,6 @@ Memastikan sistem tahan terhadap kegagalan dan manipulasi.
 ---
 
 *Dokumen ini bersifat dinamis dan akan diperbarui sesuai dengan progres pengembangan proyek.*  
-*Last Updated: April 26, 2026*  
-*Version: 2.0*
+*Audit & rekomendasi: lihat [docs/AUDIT_PLAN.md](docs/AUDIT_PLAN.md)*  
+*Last Updated: April 29, 2026*  
+*Version: 2.1 — Updated based on audit recommendations*

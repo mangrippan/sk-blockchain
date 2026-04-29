@@ -37,6 +37,7 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
 * [ ] **1.3 Database Setup**
   - Install PostgreSQL
   - Buat database: `chainrank_db`
+  - **Gunakan `database/schema.sql` sebagai schema canonical** (archive file schema lain)
   - Schema sederhana:
     ```sql
     -- Tabel users (simplified)
@@ -75,6 +76,34 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
     ```
   - Pastikan network berjalan dengan benar
 
+* [ ] **1.5 Docker Compose untuk Development** ⚠️ WAJIB
+  - Buat `docker-compose.dev.yml` minimal dengan PostgreSQL:
+    ```yaml
+    services:
+      postgres:
+        image: postgres:15
+        environment:
+          POSTGRES_DB: chainrank_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${DB_PASSWORD}
+        ports:
+          - "5432:5432"
+        volumes:
+          - pgdata:/var/lib/postgresql/data
+          - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+          - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    volumes:
+      pgdata:
+    ```
+  - Ini mempercepat setup & memastikan reproducibility
+
+* [ ] **1.6 Seed Data Script**
+  - Buat `database/seed.sql` atau `database/seed.js`:
+    - 2-3 user (dosen, admin) dengan password sudah di-hash
+    - 5-10 kegiatan sample (beberapa verified, beberapa pending)
+    - Data referensi jenis kegiatan
+  - **Krusial untuk demo** agar tidak mulai dari database kosong
+
 ---
 
 ### **Minggu 2: Backend Development** 💻
@@ -90,11 +119,34 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
   ```
   /backend
     /config       # Database & Fabric connection config
-    /controllers  # Business logic
+    /controllers  # Request/response handling (thin)
+    /services     # Business logic (thick) ← PENTING!
+    /models       # Database models/schemas
     /routes       # API routes
     /middleware   # Auth middleware
     /utils        # Helper functions (hash, fabric client)
+    /validators   # Input validation
     server.js     # Entry point
+  ```
+
+* [ ] **Environment Variable Validation** di `server.js`:
+  ```javascript
+  const required = ['DB_HOST', 'DB_PASSWORD', 'JWT_SECRET'];
+  for (const key of required) {
+    if (!process.env[key]) {
+      console.error(`❌ Missing required env: ${key}`);
+      process.exit(1);
+    }
+  }
+  ```
+
+* [ ] **Graceful Shutdown**:
+  ```javascript
+  process.on('SIGTERM', async () => {
+    await pool.end();           // Close DB connections
+    await gateway.disconnect(); // Close Fabric gateway
+    process.exit(0);
+  });
   ```
 
 #### **2.2 Core Features Backend**
@@ -103,14 +155,21 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
   - Login endpoint (generate JWT token)
   - Auth middleware untuk protect routes
 
-* [ ] **API Endpoints (Minimal 4)**
-  - `POST /api/kegiatan` - Upload kegiatan + file
-  - `GET /api/kegiatan` - List semua kegiatan user
-  - `GET /api/kegiatan/:id` - Detail kegiatan
-  - `GET /api/kegiatan/:id/audit` - Audit trail dari blockchain
+* [ ] **API Endpoints (Minimal 5)** — gunakan versioned path `/api/v1/`
+  - `POST /api/v1/kegiatan` - Upload kegiatan + file
+  - `GET /api/v1/kegiatan` - List semua kegiatan user
+  - `GET /api/v1/kegiatan/:id` - Detail kegiatan
+  - `GET /api/v1/kegiatan/:id/audit` - Audit trail dari blockchain
+  - `GET /api/v1/health` - **Health check** (status DB, Fabric, uptime)
+    ```javascript
+    // Response:
+    { "status": "ok", "database": "connected", "blockchain": "connected", "uptime": "..." }
+    ```
+    > Penting untuk demo — dosen penguji bisa langsung lihat status semua komponen
 
 * [ ] **File Upload Handler**
   - Multer config untuk accept PDF (max 5MB)
+  - **Validasi file type via magic bytes** (bukan hanya extension) — cegah upload file berbahaya
   - Simpan file di `/uploads` folder
   - Generate SHA-256 hash dari file
 
@@ -170,6 +229,28 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
     }
   }
   ```
+
+* [ ] **Fabric Compensation Mechanism** ⚠️ PENTING
+  > Jika Fabric berhasil tapi UPDATE txId ke PostgreSQL gagal, data menjadi inkonsisten.
+  
+  Solusi: Buat tabel `pending_blockchain_sync` untuk retry:
+  ```sql
+  CREATE TABLE pending_blockchain_sync (
+    id SERIAL PRIMARY KEY,
+    kegiatan_id INTEGER,
+    blockchain_tx_id VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'pending', -- pending, synced, failed
+    retry_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  ```
+  - Jika DB update gagal setelah Fabric sukses → log ke tabel ini
+  - Background job atau manual retry untuk sinkronisasi ulang
+
+* [ ] **Fallback Mode (Database-Only)** 🛡️
+  - Jika Fabric network down saat demo, backend tetap bisa jalan
+  - Set `blockchain_tx_id = NULL` dan `status = 'pending_blockchain'`
+  - Safety net yang penting agar demo tidak gagal total
 
 ---
 
@@ -286,8 +367,21 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
   - Narasi menjelaskan fitur
   - Tunjukkan audit trail & hash verification
 
-#### **4.5 Deployment Preparation** (Optional)
-* [ ] Docker Compose untuk easy setup:
+* [ ] **Demo Script** (ikuti urutan ini saat presentasi):
+  1. Tunjukkan architecture diagram (30 detik)
+  2. Tunjukkan health check endpoint — semua komponen connected (30 detik)
+  3. Register & Login sebagai dosen (1 menit)
+  4. Upload kegiatan dengan PDF (2 menit)
+  5. Tunjukkan data di PostgreSQL via psql query (1 menit)
+  6. Tunjukkan hash di blockchain via peer CLI (1 menit)
+  7. **Tampering demo:** edit file PDF manual → verify → detect hash mismatch (2 menit)
+  8. Tunjukkan audit trail timeline (1 menit)
+  9. Closing: architecture recap & kesimpulan (30 detik)
+  > **Tip:** Record demo video dari awal pengerjaan, jadi ada backup jika ada bug mendadak
+
+#### **4.5 Deployment & Reproducibility**
+* [x] Docker Compose untuk development ← **dipindah ke Minggu 1** (lihat 1.5)
+* [ ] Docker Compose untuk full stack (backend + frontend + postgres):
   ```yaml
   # docker-compose.yml
   services:
@@ -304,6 +398,7 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
       # ... config
   ```
 * [ ] `.env.example` untuk environment variables
+* [ ] Postman Collection (`docs/ChainRank.postman_collection.json`)
 * [ ] Deployment instructions
 
 ---
@@ -356,11 +451,17 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
 - [ ] Advanced filtering & search
 - [ ] Dashboard statistics (chart)
 
+### Should Have (P1.5) - Minimal security untuk demo aman
+- [ ] Input sanitization (cegah XSS/SQL injection di demo)
+- [ ] File magic bytes validation (bukan hanya extension check)
+- [ ] JWT secret strength validation
+- [ ] Health check endpoint
+
 ### Can Skip (P2) - Tidak perlu untuk tugas kuliah
 - [ ] Multiple user roles dengan permission
 - [ ] Email notification
 - [ ] Production deployment
-- [ ] Advanced security (rate limiting, CSRF, etc)
+- [ ] Rate limiting, CSRF protection
 - [ ] Monitoring & logging
 - [ ] CI/CD pipeline
 
@@ -845,5 +946,6 @@ Jika ingin lanjutkan jadi production app, lihat [plan-full.md](plan-full.md) unt
 
 *Dokumen ini adalah versi simplified untuk tugas kuliah 1 bulan.*  
 *Untuk production planning, refer to [plan-full.md](plan-full.md)*  
-*Last Updated: April 26, 2026*  
-*Version: MVP 1.0*
+*Audit & rekomendasi: lihat [docs/AUDIT_PLAN.md](docs/AUDIT_PLAN.md)*  
+*Last Updated: April 29, 2026*  
+*Version: MVP 1.1 — Updated based on audit recommendations*
