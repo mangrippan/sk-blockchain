@@ -16,13 +16,11 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  
-  // Set default schema untuk hybrid schema
-  options: '-c search_path=sk,public',
 });
 
-// Test connection on startup
-pool.on('connect', () => {
+// Set search_path setelah connect
+pool.on('connect', (client) => {
+  client.query('SET search_path TO sk, public');
   console.log('✅ Connected to PostgreSQL database');
 });
 
