@@ -1,8 +1,9 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Kegiatan Saya</h1>
+      <h1 class="text-2xl font-bold text-gray-900">{{ pageTitle }}</h1>
       <button
+        v-if="!auth.canVerify"
         @click="$router.push('/kegiatan/create')"
         class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
       >
@@ -53,11 +54,12 @@
       <table v-else class="w-full">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
+            <th v-if="auth.canVerify" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dosen</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kegiatan</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Poin KUM</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
+            <th v-if="!auth.canVerify" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200">
@@ -67,6 +69,10 @@
             class="hover:bg-gray-50 cursor-pointer"
             @click="$router.push(`/kegiatan/${item.id}`)"
           >
+            <td v-if="auth.canVerify" class="px-6 py-4">
+              <p class="font-medium text-gray-900">{{ item.nama_dosen || '-' }}</p>
+              <p class="text-sm text-gray-500">{{ item.nip_nidn || '-' }}</p>
+            </td>
             <td class="px-6 py-4">
               <p class="font-medium text-gray-900">{{ item.nama_kegiatan }}</p>
               <p class="text-sm text-gray-500">{{ item.nama_kategori }}</p>
@@ -76,7 +82,7 @@
               <StatusBadge :status="item.status" />
             </td>
             <td class="px-6 py-4 text-sm text-gray-600">{{ formatDate(item.created_at) }}</td>
-            <td class="px-6 py-4 text-right">
+            <td v-if="!auth.canVerify" class="px-6 py-4 text-right">
               <button
                 @click.stop="handleDelete(item.id)"
                 class="text-red-600 hover:text-red-700"
@@ -92,16 +98,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
 import { kegiatanApi } from '@/api/kegiatan'
+import { useAuthStore } from '@/stores/auth'
 import StatusBadge from '@/components/StatusBadge.vue'
 
+const auth = useAuthStore()
 const kegiatan = ref([])
 const loading = ref(false)
 const filters = reactive({
   search: '',
   status: '',
+})
+
+const pageTitle = computed(() => {
+  return auth.canVerify ? 'Semua Kegiatan' : 'Kegiatan Saya'
 })
 
 onMounted(() => {
