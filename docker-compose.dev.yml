@@ -1,0 +1,44 @@
+# Docker Compose for Development
+# Starts PostgreSQL database with auto schema initialization
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: chainrank_postgres_dev
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: chainrank_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+      # Performance tuning for development
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      # Persistent data storage
+      - pgdata_dev:/var/lib/postgresql/data
+
+      # Auto-initialize schema & seed data on first run
+      - ./database/schema-hybrid.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chainrank_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - chainrank_network
+
+networks:
+  chainrank_network:
+    driver: bridge
+
+volumes:
+  pgdata_dev:
+    name: chainrank_pgdata_dev

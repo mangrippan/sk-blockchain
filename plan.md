@@ -22,51 +22,26 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
 **Target:** Semua tools & environment siap digunakan
 
 #### Checklist:
-* [ ] **1.1 Setup Repository**
+* [x] **1.1 Setup Repository** ✅
   - Inisialisasi Git repository
   - Struktur folder: `/backend`, `/frontend`, `/chaincode`, `/docs`
   - README.md dengan instruksi setup
 
-* [ ] **1.2 Install & Setup Tools**
+* [x] **1.2 Install & Setup Tools** ✅
   - Node.js v18+ & npm
-  - PostgreSQL 15
+  - PostgreSQL 15 (Docker)
   - Docker & Docker Compose
   - VS Code dengan extension (Prettier, ESLint)
   - Postman untuk testing API
 
-* [ ] **1.3 Database Setup**
-  - Install PostgreSQL
+* [x] **1.3 Database Setup** ✅
+  - Install PostgreSQL (via Docker)
   - Buat database: `chainrank_db`
-  - **Gunakan `database/schema.sql` sebagai schema canonical** (archive file schema lain)
-  - Schema sederhana:
-    ```sql
-    -- Tabel users (simplified)
-    CREATE TABLE users (
-      id SERIAL PRIMARY KEY,
-      nip VARCHAR(50) UNIQUE NOT NULL,
-      nama VARCHAR(200) NOT NULL,
-      email VARCHAR(100) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      role VARCHAR(20) DEFAULT 'dosen' -- dosen, admin
-    );
+  - **Gunakan `database/schema.sql` sebagai schema canonical**
+  - Schema sudah dibuat dengan 3 tabel: users, kegiatan_dosen, audit_logs
+  - Seed data sudah di-load (6 users, 8 kegiatan sample)
 
-    -- Tabel kegiatan_dosen
-    CREATE TABLE kegiatan_dosen (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id),
-      jenis_kegiatan VARCHAR(100) NOT NULL,
-      deskripsi TEXT,
-      poin_kum DECIMAL(5,2) NOT NULL,
-      file_name VARCHAR(255),
-      file_hash VARCHAR(64) NOT NULL, -- SHA-256 hash
-      blockchain_tx_id VARCHAR(100), -- Fabric transaction ID
-      status VARCHAR(20) DEFAULT 'pending', -- pending, verified, rejected
-      created_at TIMESTAMP DEFAULT NOW(),
-      verified_at TIMESTAMP
-    );
-    ```
-
-* [ ] **1.4 Hyperledger Fabric Network**
+* [ ] **1.4 Hyperledger Fabric Network** ⏳ NEXT
   - Clone Fabric Samples: `git clone https://github.com/hyperledger/fabric-samples.git`
   - Download Fabric binaries & Docker images
   - Start test-network:
@@ -76,33 +51,24 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
     ```
   - Pastikan network berjalan dengan benar
 
-* [ ] **1.5 Docker Compose untuk Development** ⚠️ WAJIB
-  - Buat `docker-compose.dev.yml` minimal dengan PostgreSQL:
-    ```yaml
-    services:
-      postgres:
-        image: postgres:15
-        environment:
-          POSTGRES_DB: chainrank_db
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ${DB_PASSWORD}
-        ports:
-          - "5432:5432"
-        volumes:
-          - pgdata:/var/lib/postgresql/data
-          - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-          - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
-    volumes:
-      pgdata:
-    ```
-  - Ini mempercepat setup & memastikan reproducibility
+* [x] **1.5 Docker Compose untuk Development** ✅
+  - Buat `docker-compose.dev.yml` minimal dengan PostgreSQL ✅
+  - Container running: `chainrank_postgres_dev` ✅
+  - Auto-initialize schema & seed data on startup ✅
+  - Health check configured ✅
 
-* [ ] **1.6 Seed Data Script**
-  - Buat `database/seed.sql` atau `database/seed.js`:
-    - 2-3 user (dosen, admin) dengan password sudah di-hash
-    - 5-10 kegiatan sample (beberapa verified, beberapa pending)
-    - Data referensi jenis kegiatan
-  - **Krusial untuk demo** agar tidak mulai dari database kosong
+* [x] **1.6 Seed Data Script** ✅
+  - Buat `database/seed.sql` ✅
+  - 6 users (1 admin, 3 dosen, 1 pimpinan, 1 test dosen) ✅
+  - 8 kegiatan sample (4 verified, 3 pending, 1 rejected) ✅
+  - 3 audit log entries ✅
+  - Default password: `password123` ✅
+  - **Database siap untuk development!** ✅
+
+**📊 Minggu 1 Status: 80% Complete** (Tinggal Hyperledger Fabric setup)
+
+Lihat progress lengkap di: [docs/WEEK1_PROGRESS.md](docs/WEEK1_PROGRESS.md)
+Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 
 ---
 
