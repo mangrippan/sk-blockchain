@@ -113,10 +113,11 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
  */
 app.get('/health', (req, res) => {
   res.json({
-    status: 'ok',
+    status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
+    database: 'connected', // Simple status for now
   });
 });
 
@@ -211,5 +212,10 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start the server
-startServer();
+// Start the server only if this file is run directly (not required as a module)
+if (require.main === module) {
+  startServer();
+}
+
+// Export app for testing
+module.exports = app;
