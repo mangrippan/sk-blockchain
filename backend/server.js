@@ -120,10 +120,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API v1 routes (will be added in next steps)
+// API v1 routes
 app.use('/api/v1/auth', require('./routes/v1/auth'));
-// app.use('/api/v1/kegiatan', require('./routes/v1/kegiatan'));
-// app.use('/api/v1/users', require('./routes/v1/users'));
+app.use('/api/v1/ref', require('./routes/v1/ref'));
+app.use('/api/v1/kegiatan', require('./routes/v1/kegiatan'));
+// app.use('/api/v1/users', require('./routes/v1/users')); // TODO: Week 2
 
 // Root endpoint
 app.get('/', (req, res) => {

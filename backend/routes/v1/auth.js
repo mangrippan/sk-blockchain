@@ -147,7 +147,7 @@ router.post('/register', async (req, res) => {
     
     // Check if user already exists
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE nip = $1 OR email = $2',
+      'SELECT id FROM sk.users WHERE nip_nidn = $1 OR email = $2',
       [nip, email]
     );
     
@@ -164,9 +164,9 @@ router.post('/register', async (req, res) => {
     
     // Insert user
     const result = await pool.query(
-      `INSERT INTO users (nip, nama, email, password_hash, role)
+      `INSERT INTO sk.users (nip_nidn, nama_lengkap, email, password_hash, role)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, nip, nama, email, role, created_at`,
+       RETURNING id, nip_nidn, nama_lengkap, email, role, created_at`,
       [nip, nama, email, password_hash, role || 'dosen']
     );
     
@@ -176,8 +176,8 @@ router.post('/register', async (req, res) => {
       message: 'User registered successfully',
       user: {
         id: user.id,
-        nip: user.nip,
-        nama: user.nama,
+        nip_nidn: user.nip_nidn,
+        nama_lengkap: user.nama_lengkap,
         email: user.email,
         role: user.role,
       },
@@ -245,8 +245,8 @@ router.post('/login', async (req, res) => {
     
     // Find user
     const result = await pool.query(
-      `SELECT id, nip, nama, email, password_hash, role, is_active
-       FROM users
+      `SELECT id, nip_nidn, nama_lengkap, email, password_hash, role, is_active
+       FROM sk.users
        WHERE email = $1 AND deleted_at IS NULL`,
       [email]
     );
@@ -282,7 +282,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       {
         id: user.id,
-        nip: user.nip,
+        nip_nidn: user.nip_nidn,
         email: user.email,
         role: user.role,
       },
@@ -294,7 +294,7 @@ router.post('/login', async (req, res) => {
     
     // Update last_login
     await pool.query(
-      'UPDATE users SET last_login = NOW() WHERE id = $1',
+      'UPDATE sk.users SET last_login = NOW() WHERE id = $1',
       [user.id]
     );
     
@@ -303,8 +303,8 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id,
-        nip: user.nip,
-        nama: user.nama,
+        nip_nidn: user.nip_nidn,
+        nama_lengkap: user.nama_lengkap,
         email: user.email,
         role: user.role,
       },
@@ -371,8 +371,8 @@ router.post('/login', async (req, res) => {
 router.get('/me', require('../../middleware/auth').auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, nip, nama, email, role, department, jabatan, created_at, last_login
-       FROM users
+      `SELECT id, public_id, nip_nidn, nama_lengkap, email, role, department, jabatan_saat_ini, created_at, last_login
+       FROM sk.users
        WHERE id = $1 AND deleted_at IS NULL`,
       [req.user.id]
     );
