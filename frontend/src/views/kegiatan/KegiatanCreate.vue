@@ -47,13 +47,14 @@
           ></textarea>
         </div>
         
-        <!-- File Upload Placeholder -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">File Bukti</label>
-          <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-            <p class="text-sm text-gray-500">Upload feature akan diimplementasi nanti</p>
-          </div>
-        </div>
+        <!-- File Upload -->
+        <FileUpload
+          v-model="uploadedFile"
+          label="File Bukti"
+          :required="true"
+          accept=".pdf,.jpg,.jpeg,.png"
+          :max-size="5 * 1024 * 1024"
+        />
         
         <!-- Error -->
         <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -85,14 +86,17 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
 import { kegiatanApi } from '@/api/kegiatan'
 import { refApi } from '@/api/ref'
+import FileUpload from '@/components/FileUpload.vue'
 
 const router = useRouter()
 const kategoriList = ref([])
 const kegiatanList = ref([])
 const loading = ref(false)
 const error = ref(null)
+const uploadedFile = ref(null)
 
 const form = reactive({
   kategori_id: '',
@@ -126,10 +130,34 @@ async function handleSubmit() {
   error.value = null
   
   try {
-    await kegiatanApi.create(form)
+    // Validate file exists
+    if (!uploadedFile.value) {
+      error.value = 'File bukti wajib diupload'
+      loading.value = false
+      return
+    }
+    
+    // Create FormData for file upload
+    const formData = new FormData()
+    formData.append('ref_kegiatan_id', form.ref_kegiatan_id)
+    if (form.deskripsi) formData.append('deskripsi', form.deskripsi)
+    formData.append('file', uploadedFile.value)
+    
+    // Debug: log FormData contents
+    console.log('Form data:', {
+      ref_kegiatan_id: form.ref_kegiatan_id,
+      deskripsi: form.deskripsi,
+      file: uploadedFile.value,
+      fileName: uploadedFile.value?.name,
+      fileSize: uploadedFile.value?.size
+    })
+    
+    await kegiatanApi.create(formData)
+    toast.success('Kegiatan berhasil ditambahkan')
     router.push('/kegiatan')
   } catch (err) {
     error.value = err.response?.data?.error || 'Gagal menyimpan kegiatan'
+    toast.error(error.value)
   } finally {
     loading.value = false
   }

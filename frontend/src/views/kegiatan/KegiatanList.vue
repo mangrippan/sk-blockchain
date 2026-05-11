@@ -4,7 +4,7 @@
       <h1 class="text-2xl font-bold text-gray-900">{{ pageTitle }}</h1>
       <button
         v-if="!auth.canVerify"
-        @click="$router.push('/kegiatan/create')"
+        @click="showCreateModal = true"
         class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
       >
         <Plus :size="20" />
@@ -43,9 +43,7 @@
     
     <!-- Table -->
     <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div v-if="loading" class="p-8 text-center text-gray-500">
-        Loading...
-      </div>
+      <LoadingSkeleton v-if="loading" variant="table" :count="5" />
       
       <div v-else-if="kegiatan.length === 0" class="p-8 text-center text-gray-500">
         Tidak ada kegiatan ditemukan
@@ -94,45 +92,301 @@
         </tbody>
       </table>
     </div>
+    
+    <!-- Pagination -->
+    <div v-if="!loading && kegiatan.length > 0" class="mt-6 flex items-center justify-between">
+      <p class="text-sm text-gray-600">
+        Menampilkan {{ (pagination.page - 1) * pagination.limit + 1 }} - 
+        {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 
+        dari {{ pagination.total }} kegiatan
+      </p>
+      <div class="flex gap-2">
+        <button
+          @click="changePage(pagination.page - 1)"
+          :disabled="pagination.page === 1"
+          class="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          Sebelumnya
+        </button>
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          @click="changePage(page)"
+          :class="[
+            'px-3 py-2 border rounded-lg transition-colors',
+            page === pagination.page
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'border-gray-300 hover:bg-gray-50'
+          ]"
+        >
+          {{ page }}
+        </button>
+        <button
+          @click="changePage(pagination.page + 1)"
+          :disabled="pagination.page === pagination.totalPages"
+          class="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          Selanjutnya
+        </button>
+      </div>
+    </div>
+    
+    <!-- Create Modal -->
+    <div
+      v-if="showCreateModal"
+      class="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 p-4"
+      @click.self="closeCreateModal"
+    >
+      <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+          <h2 class="text-xl font-bold text-gray-900">Tambah Kegiatan</h2>
+          <button @click="closeCreateModal" class="text-gray-600 hover:text-gray-900">
+            <X :size="20" />
+          </button>
+        </div>
+        
+        <div class="p-6">
+          <form @submit.prevent="handleCreateSubmit" class="space-y-4">
+            <!-- Kategori -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Kategori KUM</label>
+              <select
+                v-model="createForm.kategori_id"
+                @change="loadKegiatanOptions"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">Pilih Kategori</option>
+                <option v-for="kat in kategoriList" :key="kat.id" :value="kat.id">
+                  {{ kat.nama_kategori }}
+                </option>
+              </select>
+            </div>
+            
+            <!-- Jenis Kegiatan -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kegiatan</label>
+              <select
+                v-model="createForm.ref_kegiatan_id"
+                required
+                :disabled="!createForm.kategori_id"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
+              >
+                <option value="">Pilih Jenis Kegiatan</option>
+                <option v-for="keg in kegiatanOptions" :key="keg.id" :value="keg.id">
+                  {{ keg.nama_kegiatan }} (Max: {{ keg.poin_maksimal }} poin)
+                </option>
+              </select>
+            </div>
+            
+            <!-- Deskripsi -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+              <textarea
+                v-model="createForm.deskripsi"
+                rows="3"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Detail kegiatan..."
+              ></textarea>
+            </div>
+            
+            <!-- File Upload -->
+            <FileUpload
+              v-model="modalUploadedFile"
+              label="File Bukti"
+              :required="true"
+              accept=".pdf,.jpg,.jpeg,.png"
+              :max-size="5 * 1024 * 1024"
+            />
+            
+            <!-- Error -->
+            <div v-if="createError" class="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p class="text-sm text-red-600">{{ createError }}</p>
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex gap-3">
+              <button
+                type="submit"
+                :disabled="creating"
+                class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {{ creating ? 'Menyimpan...' : 'Simpan' }}
+              </button>
+              <button
+                type="button"
+                @click="closeCreateModal"
+                class="px-6 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Batal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { Plus, Trash2, X } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { kegiatanApi } from '@/api/kegiatan'
+import { refApi } from '@/api/ref'
 import { useAuthStore } from '@/stores/auth'
 import StatusBadge from '@/components/StatusBadge.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import FileUpload from '@/components/FileUpload.vue'
 
 const auth = useAuthStore()
 const kegiatan = ref([])
 const loading = ref(false)
+const showCreateModal = ref(false)
+const kategoriList = ref([])
+const kegiatanOptions = ref([])
+const creating = ref(false)
+const createError = ref(null)
+const modalUploadedFile = ref(null)
+
 const filters = reactive({
   search: '',
   status: '',
+})
+const pagination = reactive({
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0,
+})
+const createForm = reactive({
+  kategori_id: '',
+  ref_kegiatan_id: '',
+  deskripsi: '',
 })
 
 const pageTitle = computed(() => {
   return auth.canVerify ? 'Semua Kegiatan' : 'Kegiatan Saya'
 })
 
+const visiblePages = computed(() => {
+  const pages = []
+  const maxVisible = 5
+  let start = Math.max(1, pagination.page - Math.floor(maxVisible / 2))
+  let end = Math.min(pagination.totalPages, start + maxVisible - 1)
+  
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  return pages
+})
+
 onMounted(() => {
   fetchKegiatan()
+  loadKategori()
 })
+
+async function loadKategori() {
+  try {
+    const { data } = await refApi.getKategori()
+    kategoriList.value = data.data || []
+  } catch (err) {
+    console.error('Failed to load kategori:', err)
+  }
+}
+
+async function loadKegiatanOptions() {
+  if (!createForm.kategori_id) return
+  
+  try {
+    const { data } = await refApi.getKegiatan({ kategori_id: createForm.kategori_id })
+    kegiatanOptions.value = data.data || []
+    createForm.ref_kegiatan_id = ''
+  } catch (err) {
+    console.error('Failed to load kegiatan:', err)
+  }
+}
+
+function closeCreateModal() {
+  showCreateModal.value = false
+  createForm.kategori_id = ''
+  createForm.ref_kegiatan_id = ''
+  createForm.deskripsi = ''
+  modalUploadedFile.value = null
+  createError.value = null
+  kegiatanOptions.value = []
+}
+
+async function handleCreateSubmit() {
+  creating.value = true
+  createError.value = null
+  
+  try {
+    // Validate file exists
+    if (!modalUploadedFile.value) {
+      createError.value = 'File bukti wajib diupload'
+      creating.value = false
+      return
+    }
+    
+    const formData = new FormData()
+    formData.append('ref_kegiatan_id', createForm.ref_kegiatan_id)
+    if (createForm.deskripsi) formData.append('deskripsi', createForm.deskripsi)
+    formData.append('file', modalUploadedFile.value)
+    
+    // Debug: log FormData contents
+    console.log('Modal form data:', {
+      ref_kegiatan_id: createForm.ref_kegiatan_id,
+      deskripsi: createForm.deskripsi,
+      file: modalUploadedFile.value,
+      fileName: modalUploadedFile.value?.name,
+      fileSize: modalUploadedFile.value?.size
+    })
+    
+    await kegiatanApi.create(formData)
+    toast.success('Kegiatan berhasil ditambahkan')
+    closeCreateModal()
+    fetchKegiatan()
+  } catch (err) {
+    createError.value = err.response?.data?.error || 'Gagal menyimpan kegiatan'
+    toast.error(createError.value)
+  } finally {
+    creating.value = false
+  }
+}
 
 async function fetchKegiatan() {
   loading.value = true
   try {
-    const params = {}
+    const params = {
+      limit: pagination.limit,
+      offset: (pagination.page - 1) * pagination.limit,
+    }
     if (filters.status) params.status = filters.status
+    if (filters.search) params.search = filters.search
     
     const { data } = await kegiatanApi.getAll(params)
     kegiatan.value = data.data || []
+    
+    if (data.pagination) {
+      pagination.total = data.pagination.total || 0
+      pagination.totalPages = Math.ceil(pagination.total / pagination.limit)
+    }
   } catch (err) {
     console.error('Failed to fetch kegiatan:', err)
   } finally {
     loading.value = false
   }
+}
+
+function changePage(page) {
+  if (page < 1 || page > pagination.totalPages) return
+  pagination.page = page
+  fetchKegiatan()
 }
 
 async function handleDelete(id) {
@@ -141,8 +395,9 @@ async function handleDelete(id) {
   try {
     await kegiatanApi.delete(id)
     kegiatan.value = kegiatan.value.filter(k => k.id !== id)
+    toast.success('Kegiatan berhasil dihapus')
   } catch (err) {
-    alert('Gagal menghapus kegiatan')
+    toast.error('Gagal menghapus kegiatan')
   }
 }
 

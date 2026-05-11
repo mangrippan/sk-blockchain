@@ -1,12 +1,20 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-    <div class="w-full max-w-md">
+  <div class="min-h-screen flex items-center justify-center px-4 relative">
+    <!-- Background Image with Overlay -->
+    <div 
+      class="absolute inset-0 bg-cover bg-center"
+      :style="{ backgroundImage: `url(${bgImage})` }"
+    >
+      <div class="absolute inset-0 bg-black/40"></div>
+    </div>
+    
+    <div class="w-full max-w-md relative z-10">
       <!-- Card -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+      <div class="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-gray-200 p-8">
         <!-- Header -->
         <div class="text-center mb-8">
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">ChainRank</h1>
-          <p class="text-gray-600">Sistem Kenaikan Pangkat Dosen</p>
+          <h1 class="text-2xl font-bold text-gray-900 mb-2">PRIMA-IPB</h1>
+          <p class="text-gray-600">Promotion Records & Integrated Management Application IPB</p>
         </div>
         
         <!-- Form -->
@@ -70,7 +78,9 @@
 <script setup>
 import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
 import { useAuthStore } from '@/stores/auth'
+import bgImage from '@/assets/ipbdep.png'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -83,9 +93,11 @@ const form = reactive({
 async function handleLogin() {
   try {
     await auth.login(form.email, form.password)
+    toast.success('Login berhasil')
     router.push('/')
   } catch (err) {
-    // Error is handled in the store
+    // Error already shown in store, but add toast
+    toast.error(auth.error || 'Login gagal')
   }
 }
 </script>

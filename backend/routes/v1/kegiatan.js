@@ -5,9 +5,47 @@
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const { pool } = require('../../config/database');
 const { auth, checkRole } = require('../../middleware/auth');
 const { generateFileHash } = require('../../utils/hashUtils');
+
+// Configure multer for file upload
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
+    const ext = path.extname(file.originalname);
+    cb(null, `kegiatan-${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed'));
+    }
+  }
+});
 
 /**
  * @swagger
@@ -54,7 +92,7 @@ const { generateFileHash } = require('../../utils/hashUtils');
  */
 router.get('/', auth, async (req, res) => {
   try {
-    const { status, limit = 20, offset = 0 } = req.query;
+    const { status, search, limit = 20, offset = 0 } = req.query;
     const userId = req.user.id;
     const userRole = req.user.role;
     
@@ -75,11 +113,23 @@ router.get('/', auth, async (req, res) => {
       paramCounter++;
     }
     
+    // Search filter
+    if (search) {
+      conditions.push(`(
+        ref.nama_kegiatan ILIKE $${paramCounter} OR 
+        u.nama_lengkap ILIKE $${paramCounter} OR
+        kat.nama_kategori ILIKE $${paramCounter}
+      )`);
+      values.push(`%${search}%`);
+      paramCounter++;
+    }
+    
     const whereClause = 'WHERE ' + conditions.join(' AND ');
     
     const query = `
       SELECT k.*, 
              u.nama_lengkap as nama_dosen,
+             u.nip_nidn,
              ref.kode_kegiatan, ref.nama_kegiatan, ref.poin_maksimal,
              kat.nama_kategori,
              v.nama_lengkap as verified_by_name
@@ -245,27 +295,49 @@ router.get('/:id', auth, async (req, res) => {
  *       500:
  *         description: Failed to create kegiatan
  */
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, upload.single('file'), async (req, res) => {
   try {
     const {
       ref_kegiatan_id,
-      poin_kum,
       deskripsi,
-      file_name,
-      file_path,
-      file_hash,
-      file_size,
     } = req.body;
     
     // Validation
-    if (!ref_kegiatan_id || !poin_kum || !file_name || !file_hash) {
+    if (!ref_kegiatan_id) {
       return res.status(400).json({
         error: 'Missing required fields',
-        required: ['ref_kegiatan_id', 'poin_kum', 'file_name', 'file_hash'],
+        required: ['ref_kegiatan_id'],
+      });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'File is required',
+        message: 'Please upload a file as proof',
       });
     }
     
     const userId = req.user.id;
+    
+    // Generate file hash
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const file_hash = generateFileHash(fileBuffer);
+    
+    // Get ref_kegiatan details for poin_kum
+    const refResult = await pool.query(
+      'SELECT poin_maksimal FROM sk.ref_kegiatan_kum WHERE id = $1',
+      [ref_kegiatan_id]
+    );
+    
+    if (refResult.rows.length === 0) {
+      // Delete uploaded file if ref_kegiatan not found
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        error: 'Invalid ref_kegiatan_id',
+      });
+    }
+    
+    const poin_kum = refResult.rows[0].poin_maksimal;
     
     // Insert kegiatan
     const query = `
@@ -282,10 +354,10 @@ router.post('/', auth, async (req, res) => {
       ref_kegiatan_id,
       poin_kum,
       deskripsi || null,
-      file_name,
-      file_path || `/uploads/${file_name}`,
+      req.file.originalname,
+      req.file.path,
       file_hash,
-      file_size || null,
+      req.file.size,
     ];
     
     const result = await pool.query(query, values);
@@ -302,6 +374,12 @@ router.post('/', auth, async (req, res) => {
     
   } catch (error) {
     console.error('Create kegiatan error:', error);
+    
+    // Delete uploaded file if error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
     res.status(500).json({
       error: 'Failed to create kegiatan',
       message: error.message,

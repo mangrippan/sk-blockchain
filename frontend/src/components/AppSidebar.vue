@@ -16,7 +16,7 @@
     >
       <!-- Logo -->
       <div class="h-16 flex items-center px-6 border-b border-gray-200">
-        <h1 class="text-xl font-bold text-gray-900">ChainRank</h1>
+        <h1 class="text-xl font-bold text-gray-900">PRIMA-IPB</h1>
       </div>
       
       <!-- Navigation -->

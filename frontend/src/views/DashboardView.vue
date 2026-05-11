@@ -4,7 +4,9 @@
     
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <LoadingSkeleton v-if="loading" variant="card" :count="4" />
       <div
+        v-else
         v-for="stat in stats"
         :key="stat.label"
         class="bg-white rounded-lg border border-gray-200 p-6"
@@ -23,9 +25,7 @@
         <h2 class="text-lg font-semibold text-gray-900">Kegiatan Terbaru</h2>
       </div>
       
-      <div v-if="loading" class="p-6 text-center text-gray-500">
-        Loading...
-      </div>
+      <LoadingSkeleton v-if="loading" variant="list" :count="3" />
       
       <div v-else-if="recentKegiatan.length === 0" class="p-6 text-center text-gray-500">
         Belum ada kegiatan
@@ -56,6 +56,7 @@ import { ref, onMounted } from 'vue'
 import { FileText, CheckCircle, Clock, Award } from 'lucide-vue-next'
 import { kegiatanApi } from '@/api/kegiatan'
 import StatusBadge from '@/components/StatusBadge.vue'
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 
 const stats = ref([
   { label: 'Total Kegiatan', value: '-', icon: FileText },
@@ -70,13 +71,26 @@ const loading = ref(false)
 onMounted(async () => {
   loading.value = true
   try {
-    const { data } = await kegiatanApi.getAll({ limit: 5 })
-    recentKegiatan.value = data.data || []
+    // Fetch all kegiatan for stats
+    const [allData, unverifiedData, verifiedData] = await Promise.all([
+      kegiatanApi.getAll({ limit: 100 }),
+      kegiatanApi.getAll({ status: 'unverified', limit: 1 }),
+      kegiatanApi.getAll({ status: 'verified', limit: 100 }),
+    ])
     
-    // Update stats from API response
-    if (data.pagination) {
-      stats.value[0].value = data.pagination.total || 0
-    }
+    // Update stats
+    stats.value[0].value = allData.data.pagination?.total || 0
+    stats.value[1].value = unverifiedData.data.pagination?.total || 0
+    stats.value[2].value = verifiedData.data.pagination?.total || 0
+    
+    // Calculate total poin KUM from verified kegiatan
+    const totalPoin = (verifiedData.data.data || []).reduce((sum, item) => {
+      return sum + (parseFloat(item.poin_kum) || 0)
+    }, 0)
+    stats.value[3].value = totalPoin.toFixed(2)
+    
+    // Get recent 5 kegiatan
+    recentKegiatan.value = (allData.data.data || []).slice(0, 5)
   } catch (err) {
     console.error('Failed to fetch kegiatan:', err)
   } finally {
