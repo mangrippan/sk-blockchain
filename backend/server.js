@@ -8,10 +8,24 @@ const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
-const { testConnection } = require('./config/database');
+const { pool, testConnection } = require('./config/database');
+const fabricClient = require('./utils/fabricClient');
+
+// ============================================
+// ENVIRONMENT VARIABLE VALIDATION
+// ============================================
+
+const requiredEnvVars = ['DB_HOST', 'DB_PASSWORD', 'JWT_SECRET'];
+const missingVars = requiredEnvVars.filter(key => !process.env[key]);
+if (missingVars.length > 0) {
+  console.error(`❌ Missing required environment variables: ${missingVars.join(', ')}`);
+  console.error('   Please check your .env file');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+let server; // Keep reference for graceful shutdown
 
 // ============================================
 // SWAGGER CONFIGURATION
@@ -180,8 +194,15 @@ async function startServer() {
       console.warn('⚠️  Database connection failed, but server will start anyway');
     }
     
+    // Connect to Fabric network (non-blocking)
+    if (fabricClient.isFabricEnabled()) {
+      await fabricClient.connectGateway();
+    } else {
+      console.log('ℹ️  Blockchain integration disabled (set FABRIC_ENABLED=true to enable)');
+    }
+    
     // Start Express server
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log('');
       console.log('='.repeat(50));
       console.log(`🚀 ChainRank Backend Server`);
@@ -205,15 +226,25 @@ async function startServer() {
 }
 
 // Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM received, shutting down gracefully...');
+async function gracefulShutdown(signal) {
+  console.log(`👋 ${signal} received, shutting down gracefully...`);
+  if (server) {
+    server.close(() => {
+      console.log('📡 HTTP server closed');
+    });
+  }
+  try {
+    await fabricClient.disconnectGateway();
+    await pool.end();
+    console.log('🗄️  Database pool closed');
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+  }
   process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('👋 SIGINT received, shutting down gracefully...');
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start the server only if this file is run directly (not required as a module)
 if (require.main === module) {

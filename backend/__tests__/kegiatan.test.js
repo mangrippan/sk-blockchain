@@ -310,4 +310,95 @@ describe('Kegiatan API', () => {
       expect(response.body).toHaveProperty('error');
     });
   });
+
+  describe('GET /api/v1/kegiatan/stats/dashboard', () => {
+    it('should return dashboard stats for authenticated user', async () => {
+      const response = await request(app)
+        .get('/api/v1/kegiatan/stats/dashboard')
+        .set('Authorization', `Bearer ${dosenToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('stats');
+      expect(response.body.stats).toHaveProperty('total');
+      expect(response.body.stats).toHaveProperty('pending');
+      expect(response.body.stats).toHaveProperty('verified');
+      expect(response.body.stats).toHaveProperty('rejected');
+      expect(response.body.stats).toHaveProperty('total_poin');
+      expect(response.body).toHaveProperty('recent');
+      expect(Array.isArray(response.body.recent)).toBe(true);
+    });
+
+    it('should return all stats for admin', async () => {
+      const response = await request(app)
+        .get('/api/v1/kegiatan/stats/dashboard')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('stats');
+      expect(typeof response.body.stats.total).toBe('number');
+    });
+
+    it('should reject unauthenticated request', async () => {
+      const response = await request(app)
+        .get('/api/v1/kegiatan/stats/dashboard')
+        .expect(401);
+
+      expect(response.body).toHaveProperty('error');
+    });
+  });
+
+  describe('GET /api/v1/kegiatan/:id/audit', () => {
+    let testKegiatanForAudit;
+
+    beforeAll(async () => {
+      if (testRefKegiatanId) {
+        const result = await pool.query(
+          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, poin_kum, deskripsi, file_name, file_path, file_hash, status)
+           VALUES ($1, $2, 5.0, 'Audit test', 'test.pdf', '/tmp/test.pdf', 'abc123hash', 'unverified')
+           RETURNING id`,
+          [testDosen.id, testRefKegiatanId]
+        );
+        testKegiatanForAudit = result.rows[0].id;
+
+        // Insert audit log entry
+        await pool.query(
+          `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, description)
+           VALUES ($1, 'CREATE', 'kegiatan_dosen', $2, 'Test audit entry')`,
+          [testDosen.id, testKegiatanForAudit]
+        );
+      }
+    });
+
+    it('should return audit trail for kegiatan', async () => {
+      if (!testKegiatanForAudit) return;
+
+      const response = await request(app)
+        .get(`/api/v1/kegiatan/${testKegiatanForAudit}/audit`)
+        .set('Authorization', `Bearer ${dosenToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('data');
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body).toHaveProperty('total');
+    });
+
+    it('should return 404 for non-existent kegiatan', async () => {
+      const response = await request(app)
+        .get('/api/v1/kegiatan/99999999-9999-9999-9999-999999999999/audit')
+        .set('Authorization', `Bearer ${dosenToken}`)
+        .expect(404);
+
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should reject unauthenticated request', async () => {
+      if (!testKegiatanForAudit) return;
+
+      const response = await request(app)
+        .get(`/api/v1/kegiatan/${testKegiatanForAudit}/audit`)
+        .expect(401);
+
+      expect(response.body).toHaveProperty('error');
+    });
+  });
 });

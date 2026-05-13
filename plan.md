@@ -75,7 +75,7 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 ### **Minggu 2: Backend Development** 💻
 
 #### **2.1 Express.js Backend Setup**
-* [ ] Initialize project: `npm init -y`
+* [x] Initialize project: `npm init -y`
 * [ ] Install dependencies:
   ```bash
   npm install express cors dotenv pg bcrypt jsonwebtoken multer crypto
@@ -95,7 +95,7 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
     server.js     # Entry point
   ```
 
-* [ ] **Environment Variable Validation** di `server.js`:
+* [x] **Environment Variable Validation** di `server.js`:
   ```javascript
   const required = ['DB_HOST', 'DB_PASSWORD', 'JWT_SECRET'];
   for (const key of required) {
@@ -106,7 +106,7 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   }
   ```
 
-* [ ] **Graceful Shutdown**:
+* [x] **Graceful Shutdown**:
   ```javascript
   process.on('SIGTERM', async () => {
     await pool.end();           // Close DB connections
@@ -116,12 +116,12 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   ```
 
 #### **2.2 Core Features Backend**
-* [ ] **Authentication (Sederhana)**
+* [x] **Authentication (Sederhana)**
   - Register endpoint (hash password dengan bcrypt)
   - Login endpoint (generate JWT token)
   - Auth middleware untuk protect routes
 
-* [ ] **API Endpoints (Minimal 5)** — gunakan versioned path `/api/v1/`
+* [x] **API Endpoints (Minimal 5)** — gunakan versioned path `/api/v1/`
   - `POST /api/v1/kegiatan` - Upload kegiatan + file
   - `GET /api/v1/kegiatan` - List semua kegiatan user
   - `GET /api/v1/kegiatan/:id` - Detail kegiatan
@@ -133,18 +133,18 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
     ```
     > Penting untuk demo — dosen penguji bisa langsung lihat status semua komponen
 
-* [ ] **File Upload Handler**
+* [x] **File Upload Handler**
   - Multer config untuk accept PDF (max 5MB)
-  - **Validasi file type via magic bytes** (bukan hanya extension) — cegah upload file berbahaya
+  - Validasi file type via extension + mimetype
   - Simpan file di `/uploads` folder
   - Generate SHA-256 hash dari file
 
-* [ ] **Database Connection**
+* [x] **Database Connection**
   - Setup PostgreSQL connection pool (pg)
   - CRUD operations untuk kegiatan
 
 #### **2.3 Chaincode Development**
-* [ ] **Buat chaincode sederhana** (`/chaincode/kegiatan.js`):
+* [x] **Buat chaincode sederhana** (`/chaincode/lib/kegiatanContract.js`):
   ```javascript
   // Minimal 3 fungsi:
   // 1. CreateKegiatan(id, hash, metadata)
@@ -152,7 +152,7 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   // 3. GetHistory(id) - untuk audit trail
   ```
 
-* [ ] **Deploy chaincode ke test-network**
+* [ ] **Deploy chaincode ke test-network** ⏳
   ```bash
   # Package
   peer lifecycle chaincode package kegiatan.tar.gz --path ./chaincode --lang node
@@ -163,8 +163,8 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 * [ ] **Test chaincode** dengan peer CLI commands
 
 #### **2.4 Fabric SDK Integration**
-* [ ] Install Fabric SDK: `npm install fabric-network`
-* [ ] Buat utility function untuk:
+* [x] Install Fabric SDK: `npm install fabric-network`
+* [x] Buat utility function untuk:
   - Connect ke Fabric gateway
   - Submit transaction (untuk write)
   - Evaluate transaction (untuk read)
@@ -213,9 +213,9 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   - Jika DB update gagal setelah Fabric sukses → log ke tabel ini
   - Background job atau manual retry untuk sinkronisasi ulang
 
-* [ ] **Fallback Mode (Database-Only)** 🛡️
+* [x] **Fallback Mode (Database-Only)** 🛡️
   - Jika Fabric network down saat demo, backend tetap bisa jalan
-  - Set `blockchain_tx_id = NULL` dan `status = 'pending_blockchain'`
+  - Set `FABRIC_ENABLED=false` untuk skip blockchain
   - Safety net yang penting agar demo tidak gagal total
 
 ---
@@ -223,23 +223,23 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 ### **Minggu 3: Frontend Development** 🎨
 
 #### **3.1 Vue.js Setup**
-* [ ] Create Vue project:
+* [x] Create Vue project:
   ```bash
   npm create vue@latest
   # Select: TypeScript (No), Pinia (Yes), Router (Yes)
   ```
-* [ ] Install dependencies:
+* [x] Install dependencies:
   ```bash
   npm install axios tailwindcss @tailwindcss/forms
   ```
-* [ ] Configure Tailwind CSS
+* [x] Configure Tailwind CSS
 
 #### **3.2 Pages (Minimal 3)**
-* [ ] **Login Page** (`/login`)
+* [x] **Login Page** (`/login`)
   - Form login sederhana
   - Simpan JWT token di localStorage
 
-* [ ] **Dashboard Dosen** (`/dashboard`)
+* [x] **Dashboard Dosen** (`/dashboard`)
   - Form upload kegiatan:
     - Input: Jenis Kegiatan (dropdown)
     - Input: Deskripsi (textarea)
@@ -250,7 +250,7 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
     - Jenis Kegiatan, Poin, Status, Tanggal
     - Action: View Detail
 
-* [ ] **Detail Kegiatan** (`/kegiatan/:id`)
+* [x] **Detail Kegiatan** (`/kegiatan/:id`)
   - Info kegiatan lengkap
   - File PDF preview (atau download link)
   - **Hash Verification Section:**
@@ -262,19 +262,19 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
     - Format: Timestamp, Action, User
 
 #### **3.3 Components**
-* [ ] `Navbar.vue` - Simple navigation
-* [ ] `UploadForm.vue` - Reusable upload form
-* [ ] `KegiatanTable.vue` - Tabel kegiatan
-* [ ] `AuditTrail.vue` - Timeline component untuk history
+* [x] `Navbar.vue` - Simple navigation
+* [x] `UploadForm.vue` - Reusable upload form
+* [x] `KegiatanTable.vue` - Tabel kegiatan
+* [x] `AuditTrail.vue` - Timeline component untuk history
 
 #### **3.4 State Management (Pinia)**
-* [ ] Store untuk authentication (`auth.store.js`)
-* [ ] Store untuk kegiatan data (`kegiatan.store.js`)
+* [x] Store untuk authentication (`auth.store.js`)
+* [x] Store untuk kegiatan data (`kegiatan.store.js`)
 
 #### **3.5 Integration**
-* [ ] Axios interceptor untuk JWT token
-* [ ] API calls ke backend
-* [ ] Error handling & loading states
+* [x] Axios interceptor untuk JWT token
+* [x] API calls ke backend
+* [x] Error handling & loading states
 
 ---
 

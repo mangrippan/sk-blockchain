@@ -72,6 +72,62 @@
           <p class="text-sm font-medium text-amber-900 mb-1">Catatan Penolakan</p>
           <p class="text-sm text-amber-700">{{ kegiatan.catatan_penolakan }}</p>
         </div>
+
+        <!-- Hash Verification -->
+        <div class="border-t border-gray-200 pt-4">
+          <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Shield :size="20" />
+            Verifikasi Integritas Dokumen
+          </h3>
+          <div class="bg-gray-50 rounded-lg p-4 space-y-2">
+            <div>
+              <p class="text-xs text-gray-500">Hash Tersimpan (SHA-256)</p>
+              <p class="font-mono text-sm text-gray-700 break-all">{{ kegiatan.file_hash || '-' }}</p>
+            </div>
+            <div v-if="kegiatan.tx_id_fabric">
+              <p class="text-xs text-gray-500">Blockchain TX ID</p>
+              <p class="font-mono text-sm text-gray-700 break-all">{{ kegiatan.tx_id_fabric }}</p>
+            </div>
+            <div v-else class="flex items-center gap-2 text-amber-600 text-sm">
+              <AlertCircle :size="16" />
+              <span>Belum tercatat di blockchain</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit Trail -->
+      <div class="mt-6 border-t border-gray-200 pt-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <History :size="20" />
+          Audit Trail
+        </h3>
+        <div v-if="auditLoading" class="text-center py-4">
+          <p class="text-sm text-gray-500">Memuat audit trail...</p>
+        </div>
+        <div v-else-if="auditTrail.length === 0" class="text-center py-4">
+          <p class="text-sm text-gray-500">Belum ada riwayat audit</p>
+        </div>
+        <div v-else class="space-y-0">
+          <div
+            v-for="(entry, index) in auditTrail"
+            :key="entry.id"
+            class="relative pl-6 pb-4"
+            :class="{ 'border-l-2 border-gray-200': index < auditTrail.length - 1 }"
+          >
+            <div class="absolute -left-1.5 top-1 w-3 h-3 rounded-full"
+              :class="getAuditDotColor(entry.action)"
+            ></div>
+            <div class="bg-gray-50 rounded-lg p-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-medium text-gray-900">{{ getAuditLabel(entry.action) }}</span>
+                <span class="text-xs text-gray-500">{{ formatDateTime(entry.created_at) }}</span>
+              </div>
+              <p class="text-sm text-gray-600">{{ entry.description || '-' }}</p>
+              <p class="text-xs text-gray-400 mt-1">oleh {{ entry.user_name || 'System' }}</p>
+            </div>
+          </div>
+        </div>
       </div>
       
       <!-- File Preview Modal -->
@@ -113,7 +169,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, FileText, Download, X } from 'lucide-vue-next'
+import { ArrowLeft, FileText, Download, X, Shield, AlertCircle, History } from 'lucide-vue-next'
 import { kegiatanApi } from '@/api/kegiatan'
 import StatusBadge from '@/components/StatusBadge.vue'
 
@@ -121,6 +177,8 @@ const route = useRoute()
 const kegiatan = ref(null)
 const loading = ref(false)
 const showPreview = ref(false)
+const auditTrail = ref([])
+const auditLoading = ref(false)
 
 const fileUrl = computed(() => {
   if (!kegiatan.value?.file_path) return ''
@@ -133,12 +191,26 @@ onMounted(async () => {
   try {
     const { data } = await kegiatanApi.getById(route.params.id)
     kegiatan.value = data
+    // Fetch audit trail
+    fetchAuditTrail()
   } catch (err) {
     console.error('Failed to fetch kegiatan:', err)
   } finally {
     loading.value = false
   }
 })
+
+async function fetchAuditTrail() {
+  auditLoading.value = true
+  try {
+    const { data } = await kegiatanApi.getAuditTrail(route.params.id)
+    auditTrail.value = data.data || []
+  } catch (err) {
+    console.error('Failed to fetch audit trail:', err)
+  } finally {
+    auditLoading.value = false
+  }
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -179,5 +251,38 @@ function downloadFile() {
   link.href = fileUrl.value
   link.download = kegiatan.value.file_name
   link.click()
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('id-ID', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function getAuditLabel(action) {
+  const labels = {
+    CREATE: 'Dibuat',
+    UPDATE: 'Diperbarui',
+    VERIFY: 'Diverifikasi',
+    REJECT: 'Ditolak',
+    DELETE: 'Dihapus',
+  }
+  return labels[action] || action
+}
+
+function getAuditDotColor(action) {
+  const colors = {
+    CREATE: 'bg-blue-500',
+    VERIFY: 'bg-green-500',
+    REJECT: 'bg-red-500',
+    UPDATE: 'bg-amber-500',
+    DELETE: 'bg-gray-500',
+  }
+  return colors[action] || 'bg-gray-400'
 }
 </script>

@@ -20,4 +20,12 @@ export const kegiatanApi = {
   delete(id) {
     return api.delete(`/kegiatan/${id}`)
   },
+
+  getAuditTrail(id) {
+    return api.get(`/kegiatan/${id}/audit`)
+  },
+
+  getDashboardStats() {
+    return api.get('/kegiatan/stats/dashboard')
+  },
 }

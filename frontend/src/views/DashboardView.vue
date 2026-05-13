@@ -71,28 +71,16 @@ const loading = ref(false)
 onMounted(async () => {
   loading.value = true
   try {
-    // Fetch all kegiatan for stats
-    const [allData, unverifiedData, verifiedData] = await Promise.all([
-      kegiatanApi.getAll({ limit: 100 }),
-      kegiatanApi.getAll({ status: 'unverified', limit: 1 }),
-      kegiatanApi.getAll({ status: 'verified', limit: 100 }),
-    ])
+    const { data } = await kegiatanApi.getDashboardStats()
     
-    // Update stats
-    stats.value[0].value = allData.data.pagination?.total || 0
-    stats.value[1].value = unverifiedData.data.pagination?.total || 0
-    stats.value[2].value = verifiedData.data.pagination?.total || 0
+    stats.value[0].value = data.stats.total
+    stats.value[1].value = data.stats.pending
+    stats.value[2].value = data.stats.verified
+    stats.value[3].value = data.stats.total_poin.toFixed(2)
     
-    // Calculate total poin KUM from verified kegiatan
-    const totalPoin = (verifiedData.data.data || []).reduce((sum, item) => {
-      return sum + (parseFloat(item.poin_kum) || 0)
-    }, 0)
-    stats.value[3].value = totalPoin.toFixed(2)
-    
-    // Get recent 5 kegiatan
-    recentKegiatan.value = (allData.data.data || []).slice(0, 5)
+    recentKegiatan.value = data.recent || []
   } catch (err) {
-    console.error('Failed to fetch kegiatan:', err)
+    console.error('Failed to fetch dashboard stats:', err)
   } finally {
     loading.value = false
   }

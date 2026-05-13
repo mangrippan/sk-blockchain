@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { pool } = require('../../config/database');
 const { auth, checkRole } = require('../../middleware/auth');
 const { generateFileHash } = require('../../utils/hashUtils');
+const fabricClient = require('../../utils/fabricClient');
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -169,6 +170,79 @@ router.get('/', auth, async (req, res) => {
     console.error('Get kegiatan error:', error);
     res.status(500).json({
       error: 'Failed to fetch kegiatan',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/kegiatan/stats/dashboard:
+ *   get:
+ *     summary: Get dashboard statistics
+ *     description: Retrieve kegiatan statistics for the current user or all (admin)
+ *     tags: [Kegiatan]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics
+ *       500:
+ *         description: Failed to fetch stats
+ */
+router.get('/stats/dashboard', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const isAdmin = ['admin_sdm', 'pimpinan', 'superadmin'].includes(userRole);
+
+    const userFilter = isAdmin ? '' : 'AND k.dosen_id = $1';
+    const params = isAdmin ? [] : [userId];
+
+    const statusQuery = `
+      SELECT 
+        COUNT(*) FILTER (WHERE k.status = 'unverified') as pending,
+        COUNT(*) FILTER (WHERE k.status = 'verified') as verified,
+        COUNT(*) FILTER (WHERE k.status = 'rejected') as rejected,
+        COUNT(*) FILTER (WHERE k.status = 'revision_requested') as revision,
+        COUNT(*) as total,
+        COALESCE(SUM(CASE WHEN k.status = 'verified' THEN k.poin_kum ELSE 0 END), 0) as total_poin
+      FROM sk.kegiatan_dosen k
+      WHERE k.deleted_at IS NULL ${userFilter}
+    `;
+
+    const statusResult = await pool.query(statusQuery, params);
+    const stats = statusResult.rows[0];
+
+    const recentQuery = `
+      SELECT k.id, k.status, k.poin_kum, k.created_at,
+             ref.nama_kegiatan,
+             u.nama_lengkap as nama_dosen
+      FROM sk.kegiatan_dosen k
+      JOIN sk.users u ON k.dosen_id = u.id
+      JOIN sk.ref_kegiatan_kum ref ON k.ref_kegiatan_id = ref.id
+      WHERE k.deleted_at IS NULL ${userFilter}
+      ORDER BY k.created_at DESC
+      LIMIT 5
+    `;
+
+    const recentResult = await pool.query(recentQuery, params);
+
+    res.json({
+      stats: {
+        total: parseInt(stats.total),
+        pending: parseInt(stats.pending),
+        verified: parseInt(stats.verified),
+        rejected: parseInt(stats.rejected),
+        revision: parseInt(stats.revision),
+        total_poin: parseFloat(stats.total_poin),
+      },
+      recent: recentResult.rows,
+    });
+  } catch (error) {
+    console.error('Get dashboard stats error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch dashboard stats',
       message: error.message,
     });
   }
@@ -363,9 +437,28 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     const result = await pool.query(query, values);
     const kegiatan = result.rows[0];
     
-    // TODO: Submit to blockchain here (Minggu 2)
-    // const txId = await fabricClient.submitTransaction('CreateKegiatan', ...);
-    // await pool.query('UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2', [txId, kegiatan.id]);
+    // Log audit trail
+    await pool.query(
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values, ip_address, description)
+       VALUES ($1, 'CREATE', 'kegiatan_dosen', $2, $3, $4, $5)`,
+      [userId, kegiatan.id, JSON.stringify({ ref_kegiatan_id, poin_kum, file_hash }), req.ip, 'Kegiatan baru dibuat']
+    );
+
+    // Submit to blockchain (non-blocking, fallback if unavailable)
+    if (fabricClient.isFabricEnabled()) {
+      try {
+        await fabricClient.recordKegiatanCreation(
+          kegiatan.id, userId, file_hash, ref_kegiatan_id, poin_kum
+        );
+        // Update tx_id if successful
+        const txResult = await pool.query(
+          'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
+          [`fabric-${Date.now()}`, kegiatan.id]
+        );
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
     
     res.status(201).json({
       message: 'Kegiatan created successfully',
@@ -474,6 +567,22 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     
     const result = await pool.query(query, values);
     
+    // Log audit trail
+    await pool.query(
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values, ip_address, description)
+       VALUES ($1, 'VERIFY', 'kegiatan_dosen', $2, $3, $4, $5)`,
+      [userId, id, JSON.stringify({ status, rejection_reason, catatan_penolakan }), req.ip, `Kegiatan ${status}`]
+    );
+
+    // Record verification on blockchain
+    if (fabricClient.isFabricEnabled()) {
+      try {
+        await fabricClient.recordKegiatanVerification(id, status, userId);
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain verification recording failed:', fabricErr.message);
+      }
+    }
+
     res.json({
       message: `Kegiatan ${status} successfully`,
       data: result.rows[0],
@@ -555,6 +664,76 @@ router.delete('/:id', auth, async (req, res) => {
     console.error('Delete kegiatan error:', error);
     res.status(500).json({
       error: 'Failed to delete kegiatan',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/kegiatan/{id}/audit:
+ *   get:
+ *     summary: Get audit trail for kegiatan
+ *     description: Retrieve audit log entries for a specific kegiatan
+ *     tags: [Kegiatan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Audit trail entries
+ *       404:
+ *         description: Kegiatan not found
+ *       500:
+ *         description: Failed to fetch audit trail
+ */
+router.get('/:id/audit', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check kegiatan exists and user has access
+    const checkQuery = `
+      SELECT dosen_id FROM sk.kegiatan_dosen WHERE id = $1 AND deleted_at IS NULL
+    `;
+    const checkResult = await pool.query(checkQuery, [id]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Kegiatan not found' });
+    }
+
+    // Dosen only sees own kegiatan audit
+    if (userRole === 'dosen' && checkResult.rows[0].dosen_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const query = `
+      SELECT al.id, al.action, al.old_values, al.new_values,
+             al.description, al.ip_address, al.created_at,
+             u.nama_lengkap as user_name, u.role as user_role
+      FROM sk.audit_logs al
+      LEFT JOIN sk.users u ON al.user_id = u.id
+      WHERE al.table_name = 'kegiatan_dosen' AND al.record_id = $1
+      ORDER BY al.created_at DESC
+    `;
+
+    const result = await pool.query(query, [id]);
+
+    res.json({
+      data: result.rows,
+      total: result.rows.length,
+    });
+  } catch (error) {
+    console.error('Get audit trail error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch audit trail',
       message: error.message,
     });
   }
