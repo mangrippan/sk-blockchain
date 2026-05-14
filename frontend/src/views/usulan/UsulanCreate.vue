@@ -117,7 +117,7 @@ async function handleSubmit() {
 onMounted(async () => {
   try {
     const { data } = await kegiatanApi.getDashboardStats()
-    kumTotal.value = data.total_kum || data.data?.total_kum || 0
+    kumTotal.value = data.stats?.total_poin || data.total_poin || 0
   } catch {
     // fallback
   }

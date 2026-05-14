@@ -10,7 +10,10 @@ export const kegiatanApi = {
   },
   
   create(data) {
-    return api.post('/kegiatan', data)
+    const isFormData = data instanceof FormData
+    return api.post('/kegiatan', data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : {})
   },
   
   verify(id, data) {

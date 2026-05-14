@@ -190,7 +190,7 @@ onMounted(async () => {
   loading.value = true
   try {
     const { data } = await kegiatanApi.getById(route.params.id)
-    kegiatan.value = data
+    kegiatan.value = data.data || data
     // Fetch audit trail
     fetchAuditTrail()
   } catch (err) {

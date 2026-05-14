@@ -67,7 +67,7 @@
               <p class="font-medium text-gray-900">{{ item.nama_dosen || '-' }}</p>
             </td>
             <td class="px-6 py-4 text-sm text-gray-900">{{ item.jabatan_tujuan }}</td>
-            <td class="px-6 py-4 text-sm text-gray-900">{{ item.total_kum }}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">{{ item.total_poin_diajukan }}</td>
             <td class="px-6 py-4">
               <StatusBadge :status="item.status" />
             </td>

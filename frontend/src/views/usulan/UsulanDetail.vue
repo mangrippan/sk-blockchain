@@ -21,7 +21,7 @@
           </div>
           <div>
             <p class="text-sm text-gray-500">Total KUM</p>
-            <p class="font-medium text-gray-900">{{ usulan.total_kum }}</p>
+            <p class="font-medium text-gray-900">{{ usulan.total_poin_diajukan }}</p>
           </div>
           <div>
             <p class="text-sm text-gray-500">Tanggal Pengajuan</p>
@@ -29,7 +29,7 @@
           </div>
           <div>
             <p class="text-sm text-gray-500">Blockchain TX</p>
-            <p class="font-mono text-xs text-gray-600 break-all">{{ usulan.blockchain_tx_id || '-' }}</p>
+            <p class="font-mono text-xs text-gray-600 break-all">{{ usulan.blockchain_tx || '-' }}</p>
           </div>
           <div v-if="usulan.catatan_penolakan" class="md:col-span-2">
             <p class="text-sm text-gray-500">Catatan Penolakan</p>
@@ -61,15 +61,37 @@
       <div v-if="auth.canVerify && usulan.status === 'diproses'" class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Terbitkan SK</h2>
         <div class="space-y-3">
-          <input
-            type="file"
-            accept=".pdf"
-            @change="skFile = $event.target.files[0]"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-          />
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nomor SK</label>
+            <input
+              v-model="skNumber"
+              type="text"
+              required
+              placeholder="Nomor SK..."
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal SK</label>
+            <input
+              v-model="skDate"
+              type="date"
+              required
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Dokumen SK (PDF)</label>
+            <input
+              type="file"
+              accept=".pdf"
+              @change="skFile = $event.target.files[0]"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
           <button
             @click="handleTerbitkanSk"
-            :disabled="!skFile"
+            :disabled="!skNumber || !skDate"
             class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
           >
             Terbitkan SK
@@ -134,6 +156,8 @@ const auditTrail = ref([])
 const showTolakModal = ref(false)
 const catatanPenolakan = ref('')
 const skFile = ref(null)
+const skNumber = ref('')
+const skDate = ref('')
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -155,7 +179,11 @@ async function handleTolak() {
 
 async function handleTerbitkanSk() {
   const formData = new FormData()
-  formData.append('file_sk', skFile.value)
+  formData.append('sk_number', skNumber.value)
+  formData.append('sk_date', skDate.value)
+  if (skFile.value) {
+    formData.append('sk_document', skFile.value)
+  }
   await store.terbitkanSk(route.params.id, formData)
   await store.fetchById(route.params.id)
 }

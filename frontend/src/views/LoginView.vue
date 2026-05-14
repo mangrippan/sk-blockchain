@@ -66,7 +66,7 @@
         <div class="mt-6 pt-6 border-t border-gray-200">
           <p class="text-xs text-gray-500 mb-2">Demo accounts:</p>
           <div class="space-y-1 text-xs text-gray-600">
-            <p>Dosen: dosen@chainrank.test / dosen123</p>
+            <p>Dosen: budi.santoso@chainrank.test / dosen123</p>
             <p>Admin: admin@chainrank.test / admin123</p>
           </div>
         </div>
