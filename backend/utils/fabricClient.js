@@ -186,6 +186,78 @@ async function verifyDocumentHash(kegiatanId, documentHash) {
   return null;
 }
 
+// ============================================
+// USULAN KENAIKAN PANGKAT FUNCTIONS
+// ============================================
+
+/**
+ * Record usulan creation on blockchain
+ */
+async function recordUsulanCreation(usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama) {
+  const timestamp = new Date().toISOString();
+  return await submitTransaction(
+    'AjukanUsulanKenaikanPangkat',
+    String(usulanId),
+    hashNIP,
+    String(totalKUM),
+    jabatanTujuan,
+    idUsulanLama ? String(idUsulanLama) : 'null',
+    timestamp
+  );
+}
+
+/**
+ * Record usulan processing on blockchain
+ */
+async function recordUsulanProcess(usulanId, processedBy) {
+  const timestamp = new Date().toISOString();
+  return await submitTransaction(
+    'ProsesUsulanKenaikanPangkat',
+    String(usulanId),
+    String(processedBy),
+    timestamp
+  );
+}
+
+/**
+ * Record usulan rejection on blockchain
+ */
+async function recordUsulanRejection(usulanId, processedBy, catatan) {
+  const timestamp = new Date().toISOString();
+  return await submitTransaction(
+    'TolakUsulanKenaikanPangkat',
+    String(usulanId),
+    String(processedBy),
+    catatan,
+    timestamp
+  );
+}
+
+/**
+ * Record SK issuance on blockchain
+ */
+async function recordUsulanSKIssued(usulanId, skHash, processedBy) {
+  const timestamp = new Date().toISOString();
+  return await submitTransaction(
+    'TerbitkanSkKenaikanPangkat',
+    String(usulanId),
+    skHash,
+    String(processedBy),
+    timestamp
+  );
+}
+
+/**
+ * Get usulan history from blockchain
+ */
+async function getUsulanHistory(usulanId) {
+  const result = await evaluateTransaction('GetHistoriUsulan', String(usulanId));
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
 module.exports = {
   isFabricEnabled,
   connectGateway,
@@ -196,4 +268,9 @@ module.exports = {
   recordKegiatanVerification,
   getKegiatanHistory,
   verifyDocumentHash,
+  recordUsulanCreation,
+  recordUsulanProcess,
+  recordUsulanRejection,
+  recordUsulanSKIssued,
+  getUsulanHistory,
 };

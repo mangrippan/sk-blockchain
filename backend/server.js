@@ -142,6 +142,7 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', require('./routes/v1/auth'));
 app.use('/api/v1/ref', require('./routes/v1/ref'));
 app.use('/api/v1/kegiatan', require('./routes/v1/kegiatan'));
+app.use('/api/v1/usulan', require('./routes/v1/usulan'));
 // app.use('/api/v1/users', require('./routes/v1/users')); // TODO: Week 2
 
 // Root endpoint

@@ -211,6 +211,203 @@ class KegiatanContract extends Contract {
     await iterator.close();
     return JSON.stringify(results);
   }
+
+  // ============================================================
+  // USULAN KENAIKAN PANGKAT FUNCTIONS
+  // ============================================================
+
+  /**
+   * Syarat KUM minimal per jabatan
+   */
+  _getMinKUM(jabatanTujuan) {
+    const syarat = {
+      'Asisten Ahli': 100,
+      'Lektor': 200,
+      'Lektor Kepala': 300,
+      'Guru Besar': 400,
+    };
+    return syarat[jabatanTujuan] || 0;
+  }
+
+  /**
+   * AjukanUsulanKenaikanPangkat - Record a new promotion request on blockchain
+   * 
+   * @param {Context} ctx
+   * @param {string} usulanId - UUID of the usulan
+   * @param {string} hashNIP - Hashed NIP of the dosen
+   * @param {string} totalKUM - Total accumulated KUM points
+   * @param {string} jabatanTujuan - Target position
+   * @param {string} idUsulanLama - Previous rejected usulan ID (null if first time)
+   * @param {string} timestamp - ISO timestamp
+   */
+  async AjukanUsulanKenaikanPangkat(ctx, usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama, timestamp) {
+    const key = 'USULAN_' + usulanId;
+
+    // Check if already exists
+    const existing = await ctx.stub.getState(key);
+    if (existing && existing.length > 0) {
+      throw new Error(`Usulan ${usulanId} already exists`);
+    }
+
+    // Validate minimum KUM
+    const minKUM = this._getMinKUM(jabatanTujuan);
+    if (parseFloat(totalKUM) < minKUM) {
+      throw new Error(`KUM tidak mencukupi. Minimal ${minKUM} untuk ${jabatanTujuan}, dimiliki: ${totalKUM}`);
+    }
+
+    // Versioning: if resubmitting after rejection
+    if (idUsulanLama && idUsulanLama !== 'null') {
+      const oldKey = 'USULAN_' + idUsulanLama;
+      const oldData = await ctx.stub.getState(oldKey);
+      if (oldData && oldData.length > 0) {
+        const oldUsulan = JSON.parse(oldData.toString());
+        if (oldUsulan.status !== 'rejected') {
+          throw new Error(`Usulan lama ${idUsulanLama} belum berstatus rejected`);
+        }
+      }
+    }
+
+    const usulan = {
+      docType: 'usulan',
+      id: usulanId,
+      hashNIP: hashNIP,
+      totalKUM: parseFloat(totalKUM),
+      jabatanTujuan: jabatanTujuan,
+      status: 'pending',
+      idUsulanLama: idUsulanLama !== 'null' ? idUsulanLama : null,
+      skHash: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      processedBy: null,
+      processedAt: null,
+      catatanPenolakan: null,
+    };
+
+    await ctx.stub.putState(key, Buffer.from(JSON.stringify(usulan)));
+
+    ctx.stub.setEvent('UsulanCreated', Buffer.from(JSON.stringify({
+      id: usulanId,
+      hashNIP: hashNIP,
+      jabatanTujuan: jabatanTujuan,
+    })));
+
+    return JSON.stringify(usulan);
+  }
+
+  /**
+   * ProsesUsulanKenaikanPangkat - Change status from Pending → Diproses
+   */
+  async ProsesUsulanKenaikanPangkat(ctx, usulanId, processedBy, timestamp) {
+    const key = 'USULAN_' + usulanId;
+    const data = await ctx.stub.getState(key);
+    if (!data || data.length === 0) {
+      throw new Error(`Usulan ${usulanId} does not exist`);
+    }
+
+    const usulan = JSON.parse(data.toString());
+    if (usulan.status !== 'pending') {
+      throw new Error(`Usulan ${usulanId} is not in pending status (current: ${usulan.status})`);
+    }
+
+    usulan.status = 'diproses';
+    usulan.processedBy = processedBy;
+    usulan.processedAt = timestamp;
+    usulan.updatedAt = timestamp;
+
+    await ctx.stub.putState(key, Buffer.from(JSON.stringify(usulan)));
+
+    ctx.stub.setEvent('UsulanProcessed', Buffer.from(JSON.stringify({
+      id: usulanId,
+      status: 'diproses',
+      processedBy: processedBy,
+    })));
+
+    return JSON.stringify(usulan);
+  }
+
+  /**
+   * TolakUsulanKenaikanPangkat - Reject an usulan
+   */
+  async TolakUsulanKenaikanPangkat(ctx, usulanId, processedBy, catatanPenolakan, timestamp) {
+    const key = 'USULAN_' + usulanId;
+    const data = await ctx.stub.getState(key);
+    if (!data || data.length === 0) {
+      throw new Error(`Usulan ${usulanId} does not exist`);
+    }
+
+    const usulan = JSON.parse(data.toString());
+    if (!['pending', 'diproses'].includes(usulan.status)) {
+      throw new Error(`Usulan ${usulanId} cannot be rejected (current: ${usulan.status})`);
+    }
+
+    usulan.status = 'rejected';
+    usulan.processedBy = processedBy;
+    usulan.processedAt = timestamp;
+    usulan.catatanPenolakan = catatanPenolakan;
+    usulan.updatedAt = timestamp;
+
+    await ctx.stub.putState(key, Buffer.from(JSON.stringify(usulan)));
+
+    ctx.stub.setEvent('UsulanRejected', Buffer.from(JSON.stringify({
+      id: usulanId,
+      status: 'rejected',
+      processedBy: processedBy,
+    })));
+
+    return JSON.stringify(usulan);
+  }
+
+  /**
+   * TerbitkanSkKenaikanPangkat - Issue SK and lock hash on blockchain
+   */
+  async TerbitkanSkKenaikanPangkat(ctx, usulanId, skHash, processedBy, timestamp) {
+    const key = 'USULAN_' + usulanId;
+    const data = await ctx.stub.getState(key);
+    if (!data || data.length === 0) {
+      throw new Error(`Usulan ${usulanId} does not exist`);
+    }
+
+    const usulan = JSON.parse(data.toString());
+    if (usulan.status !== 'diproses') {
+      throw new Error(`Usulan ${usulanId} must be in 'diproses' status to issue SK (current: ${usulan.status})`);
+    }
+
+    usulan.status = 'sk_issued';
+    usulan.skHash = skHash;
+    usulan.processedBy = processedBy;
+    usulan.processedAt = timestamp;
+    usulan.updatedAt = timestamp;
+
+    await ctx.stub.putState(key, Buffer.from(JSON.stringify(usulan)));
+
+    ctx.stub.setEvent('SKIssued', Buffer.from(JSON.stringify({
+      id: usulanId,
+      skHash: skHash,
+      processedBy: processedBy,
+    })));
+
+    return JSON.stringify(usulan);
+  }
+
+  /**
+   * GetUsulan - Read usulan from blockchain (wraps GetAset for USULAN_ key)
+   */
+  async GetUsulan(ctx, usulanId) {
+    const key = 'USULAN_' + usulanId;
+    const data = await ctx.stub.getState(key);
+    if (!data || data.length === 0) {
+      throw new Error(`Usulan ${usulanId} does not exist`);
+    }
+    return data.toString();
+  }
+
+  /**
+   * GetHistoriUsulan - Get full audit trail for an usulan
+   */
+  async GetHistoriUsulan(ctx, usulanId) {
+    const key = 'USULAN_' + usulanId;
+    return await this.GetHistory(ctx, key);
+  }
 }
 
 module.exports = KegiatanContract;
