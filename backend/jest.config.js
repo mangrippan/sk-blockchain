@@ -1,8 +1,9 @@
 module.exports = {
   testEnvironment: 'node',
   coveragePathIgnorePatterns: ['/node_modules/'],
-  testMatch: ['**/__tests__/**/*.js', '**/?(*.)+(spec|test).js'],
+  testMatch: ['**/__tests__/**/*.test.js'],
   setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
+  maxWorkers: 1,
   collectCoverageFrom: [
     'routes/**/*.js',
     'controllers/**/*.js',

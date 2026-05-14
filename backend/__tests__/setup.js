@@ -19,7 +19,9 @@ process.env.NODE_ENV = 'test';
 async function cleanupDatabase() {
   try {
     // Delete test data in reverse order of dependencies
-    await pool.query('DELETE FROM sk.kegiatan_dosen WHERE created_at > NOW() - INTERVAL \'1 hour\'');
+    await pool.query('DELETE FROM sk.audit_logs WHERE user_id IN (SELECT id FROM sk.users WHERE email LIKE \'%test%\')');
+    await pool.query('DELETE FROM sk.usulan_kenaikan_pangkat WHERE dosen_id IN (SELECT id FROM sk.users WHERE email LIKE \'%test%\')');
+    await pool.query('DELETE FROM sk.kegiatan_dosen WHERE dosen_id IN (SELECT id FROM sk.users WHERE email LIKE \'%test%\')');
     await pool.query('DELETE FROM sk.users WHERE email LIKE \'%test%\'');
   } catch (error) {
     console.error('Cleanup error:', error);

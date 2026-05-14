@@ -5,6 +5,8 @@
 
 const request = require('supertest');
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const kegiatanRouter = require('../routes/v1/kegiatan');
 const { pool } = require('../config/database');
 const { createTestUser, generateTestToken } = require('./setup');
@@ -103,10 +105,10 @@ describe('Kegiatan API', () => {
     beforeAll(async () => {
       if (testRefKegiatanId) {
         const result = await pool.query(
-          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, judul, deskripsi, status)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, poin_kum, deskripsi, file_name, file_path, file_hash, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING id`,
-          [testDosen.id, testRefKegiatanId, 'Test Kegiatan', 'Test Description', 'unverified']
+          [testDosen.id, testRefKegiatanId, 10, 'Test Description', 'test.pdf', '/uploads/test.pdf', 'abc123hash', 'unverified']
         );
         testKegiatanId = result.rows[0].id;
       }
@@ -123,8 +125,8 @@ describe('Kegiatan API', () => {
         .set('Authorization', `Bearer ${dosenToken}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body).toHaveProperty('judul', 'Test Kegiatan');
+      expect(response.body.data).toHaveProperty('id');
+      expect(response.body.data).toHaveProperty('deskripsi', 'Test Description');
     });
 
     it('should return 404 for non-existent kegiatan', async () => {
@@ -154,34 +156,29 @@ describe('Kegiatan API', () => {
         return;
       }
 
-      const newKegiatan = {
-        ref_kegiatan_id: testRefKegiatanId,
-        judul: 'New Test Kegiatan',
-        deskripsi: 'Description of new test kegiatan',
-        tanggal_mulai: '2024-01-01',
-        tanggal_selesai: '2024-06-30',
-      };
+      const testFilePath = path.join(__dirname, 'fixtures', 'test.pdf');
+      // Create a minimal test file if it doesn't exist
+      const fixturesDir = path.join(__dirname, 'fixtures');
+      if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
+      if (!fs.existsSync(testFilePath)) fs.writeFileSync(testFilePath, '%PDF-1.4 fake pdf content');
 
       const response = await request(app)
         .post('/api/v1/kegiatan')
         .set('Authorization', `Bearer ${dosenToken}`)
-        .send(newKegiatan)
+        .field('ref_kegiatan_id', String(testRefKegiatanId))
+        .field('deskripsi', 'Description of new test kegiatan')
+        .attach('file', testFilePath)
         .expect(201);
 
       expect(response.body).toHaveProperty('message');
       expect(response.body.data).toHaveProperty('id');
-      expect(response.body.data).toHaveProperty('judul', newKegiatan.judul);
     });
 
     it('should reject kegiatan with missing required fields', async () => {
-      const invalidKegiatan = {
-        judul: 'Missing ref_kegiatan_id',
-      };
-
       const response = await request(app)
         .post('/api/v1/kegiatan')
         .set('Authorization', `Bearer ${dosenToken}`)
-        .send(invalidKegiatan)
+        .field('deskripsi', 'Missing ref and file')
         .expect(400);
 
       expect(response.body).toHaveProperty('error');
@@ -190,10 +187,7 @@ describe('Kegiatan API', () => {
     it('should reject unauthenticated request', async () => {
       const response = await request(app)
         .post('/api/v1/kegiatan')
-        .send({
-          ref_kegiatan_id: testRefKegiatanId,
-          judul: 'Test',
-        })
+        .field('ref_kegiatan_id', String(testRefKegiatanId || 1))
         .expect(401);
 
       expect(response.body).toHaveProperty('error');
@@ -206,10 +200,10 @@ describe('Kegiatan API', () => {
     beforeAll(async () => {
       if (testRefKegiatanId) {
         const result = await pool.query(
-          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, judul, deskripsi, status)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, poin_kum, deskripsi, file_name, file_path, file_hash, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING id`,
-          [testDosen.id, testRefKegiatanId, 'To Verify', 'To be verified', 'unverified']
+          [testDosen.id, testRefKegiatanId, 10, 'To be verified', 'verify.pdf', '/uploads/verify.pdf', 'hash123', 'unverified']
         );
         kegiatanToVerify = result.rows[0].id;
       }
@@ -268,10 +262,10 @@ describe('Kegiatan API', () => {
     beforeEach(async () => {
       if (testRefKegiatanId) {
         const result = await pool.query(
-          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, judul, deskripsi, status)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, poin_kum, deskripsi, file_name, file_path, file_hash, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING id`,
-          [testDosen.id, testRefKegiatanId, 'To Delete', 'To be deleted', 'unverified']
+          [testDosen.id, testRefKegiatanId, 10, 'To be deleted', 'delete.pdf', '/uploads/delete.pdf', 'hash456', 'unverified']
         );
         kegiatanToDelete = result.rows[0].id;
       }

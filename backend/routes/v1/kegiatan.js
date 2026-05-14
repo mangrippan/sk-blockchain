@@ -11,7 +11,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { pool } = require('../../config/database');
 const { auth, checkRole } = require('../../middleware/auth');
-const { generateFileHash } = require('../../utils/hashUtils');
+const { hashFileBuffer: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
 
 // Configure multer for file upload
