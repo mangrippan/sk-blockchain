@@ -95,7 +95,7 @@ router.get('/', async (req, res) => {
     const dataResult = await pool.query(
       `SELECT u.*, 
               d.nama_lengkap as nama_dosen,
-              d.nip,
+              d.nip_nidn,
               d.department,
               p.nama_lengkap as processed_by_name
        FROM sk.usulan_kenaikan_pangkat u
@@ -149,7 +149,7 @@ router.get('/:id', async (req, res) => {
  * POST /api/v1/usulan
  * Ajukan usulan kenaikan pangkat
  */
-router.post('/', checkRole(['dosen']), async (req, res) => {
+router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
   try {
     const {
       jabatan_asal,
@@ -167,7 +167,7 @@ router.post('/', checkRole(['dosen']), async (req, res) => {
     const kumResult = await pool.query(
       `SELECT COALESCE(SUM(poin_kum), 0) as total_poin
        FROM sk.kegiatan_dosen
-       WHERE user_id = $1 AND status = 'verified' AND deleted_at IS NULL`,
+       WHERE dosen_id = $1 AND status = 'verified' AND deleted_at IS NULL`,
       [req.user.id]
     );
     const totalPoin = parseFloat(kumResult.rows[0].total_poin);
@@ -194,7 +194,7 @@ router.post('/', checkRole(['dosen']), async (req, res) => {
     const submitted = await Usulan.submit(usulan.id);
 
     // Record to blockchain
-    const hashNIP = crypto.createHash('sha256').update(req.user.nip || '').digest('hex');
+    const hashNIP = crypto.createHash('sha256').update(req.user.nip_nidn || '').digest('hex');
     const txResult = await fabricClient.recordUsulanCreation(
       usulan.id,
       hashNIP,
@@ -209,9 +209,9 @@ router.post('/', checkRole(['dosen']), async (req, res) => {
 
     // Audit log
     await pool.query(
-      `INSERT INTO sk.audit_logs (user_id, action, entity_type, entity_id, details)
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5)`,
-      [req.user.id, 'CREATE', 'usulan', usulan.id, JSON.stringify({
+      [req.user.id, 'CREATE', 'usulan_kenaikan_pangkat', usulan.id, JSON.stringify({
         jabatan_tujuan, total_poin: totalPoin, blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
@@ -230,7 +230,7 @@ router.post('/', checkRole(['dosen']), async (req, res) => {
  * PUT /api/v1/usulan/:id/proses
  * Admin: Process usulan (pending → diproses)
  */
-router.put('/:id/proses', checkRole(['admin', 'pimpinan']), async (req, res) => {
+router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), async (req, res) => {
   try {
     const result = await Usulan.process(req.params.id, req.user.id);
     if (!result) {
@@ -245,9 +245,9 @@ router.put('/:id/proses', checkRole(['admin', 'pimpinan']), async (req, res) => 
 
     // Audit log
     await pool.query(
-      `INSERT INTO sk.audit_logs (user_id, action, entity_type, entity_id, details)
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5)`,
-      [req.user.id, 'PROCESS', 'usulan', req.params.id, JSON.stringify({
+      [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'diproses', blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
@@ -263,7 +263,7 @@ router.put('/:id/proses', checkRole(['admin', 'pimpinan']), async (req, res) => 
  * PUT /api/v1/usulan/:id/tolak
  * Admin: Reject usulan
  */
-router.put('/:id/tolak', checkRole(['admin', 'pimpinan']), async (req, res) => {
+router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), async (req, res) => {
   try {
     const { catatan_penolakan } = req.body;
     if (!catatan_penolakan) {
@@ -285,9 +285,9 @@ router.put('/:id/tolak', checkRole(['admin', 'pimpinan']), async (req, res) => {
 
     // Audit log
     await pool.query(
-      `INSERT INTO sk.audit_logs (user_id, action, entity_type, entity_id, details)
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5)`,
-      [req.user.id, 'REJECT', 'usulan', req.params.id, JSON.stringify({
+      [req.user.id, 'REJECT', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'rejected', catatan_penolakan, blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
@@ -303,7 +303,7 @@ router.put('/:id/tolak', checkRole(['admin', 'pimpinan']), async (req, res) => {
  * PUT /api/v1/usulan/:id/terbitkan-sk
  * Admin: Issue SK (diproses → sk_issued) with SK document upload
  */
-router.put('/:id/terbitkan-sk', checkRole(['admin', 'pimpinan']), upload.single('sk_document'), async (req, res) => {
+router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), upload.single('sk_document'), async (req, res) => {
   try {
     const { sk_number, sk_date } = req.body;
     if (!sk_number || !sk_date) {
@@ -343,9 +343,9 @@ router.put('/:id/terbitkan-sk', checkRole(['admin', 'pimpinan']), upload.single(
 
     // Audit log
     await pool.query(
-      `INSERT INTO sk.audit_logs (user_id, action, entity_type, entity_id, details)
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5)`,
-      [req.user.id, 'ISSUE_SK', 'usulan', req.params.id, JSON.stringify({
+      [req.user.id, 'ISSUE_SK', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'sk_issued', sk_number, sk_document_hash,
         blockchain_tx: txResult ? 'success' : 'skipped',
       })]
@@ -380,7 +380,7 @@ router.get('/:id/audit', async (req, res) => {
     // Get DB audit logs as fallback/complement
     const dbAudit = await pool.query(
       `SELECT * FROM sk.audit_logs
-       WHERE entity_type = 'usulan' AND entity_id = $1
+       WHERE table_name = 'usulan_kenaikan_pangkat' AND record_id = $1
        ORDER BY created_at ASC`,
       [req.params.id]
     );
