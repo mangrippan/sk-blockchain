@@ -8,11 +8,14 @@
 
 ## 🎯 Tujuan MVP
 Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
-1. ✅ Pencatatan kegiatan dosen ke database PostgreSQL
-2. ✅ Hashing dokumen & penyimpanan hash ke Hyperledger Fabric blockchain
-3. ✅ Verifikasi integritas dokumen melalui hash comparison
-4. ✅ Audit trail sederhana dari blockchain history
-5. ✅ Interface web untuk upload & view data
+1. ✅ Pencatatan kegiatan dosen ke database PostgreSQL + hash ke Hyperledger Fabric
+2. ✅ Verifikasi & penolakan kegiatan oleh Admin SDM (status on-chain)
+3. ✅ Alur usulan kenaikan pangkat (Pending → Diproses → SK_Issued)
+4. ✅ Penerbitan SK dengan hash dokumen SK di blockchain
+5. ✅ Verifikasi integritas dokumen melalui hash comparison
+6. ✅ Audit trail dari blockchain history (kegiatan + usulan)
+7. ✅ Monitoring KUM (progress bar akumulasi poin terverifikasi)
+8. ✅ Interface web untuk dosen & admin SDM
 
 ---
 
@@ -121,11 +124,28 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   - Login endpoint (generate JWT token)
   - Auth middleware untuk protect routes
 
-* [x] **API Endpoints (Minimal 5)** — gunakan versioned path `/api/v1/`
-  - `POST /api/v1/kegiatan` - Upload kegiatan + file
-  - `GET /api/v1/kegiatan` - List semua kegiatan user
+* [x] **API Endpoints** — gunakan versioned path `/api/v1/`
+
+  **Kegiatan:**
+  - `POST /api/v1/kegiatan` - Catat kegiatan + upload file (hash ke blockchain)
+  - `GET /api/v1/kegiatan` - List kegiatan user (dari DB)
   - `GET /api/v1/kegiatan/:id` - Detail kegiatan
+  - `PUT /api/v1/kegiatan/:id/verifikasi` - Admin: Verifikasi kegiatan → blockchain
+  - `PUT /api/v1/kegiatan/:id/tolak` - Admin: Tolak kegiatan → blockchain
+  - `POST /api/v1/kegiatan/:id/perbaikan` - Dosen: Ajukan perbaikan (versioning)
   - `GET /api/v1/kegiatan/:id/audit` - Audit trail dari blockchain
+
+  **Usulan Kenaikan Pangkat:**
+  - `POST /api/v1/usulan` - Ajukan usulan kenaikan pangkat → blockchain
+  - `GET /api/v1/usulan` - List usulan (by role)
+  - `GET /api/v1/usulan/:id` - Detail usulan
+  - `PUT /api/v1/usulan/:id/proses` - Admin: Proses usulan → blockchain
+  - `PUT /api/v1/usulan/:id/tolak` - Admin: Tolak usulan → blockchain
+  - `PUT /api/v1/usulan/:id/terbitkan-sk` - Admin: Terbitkan SK + hash → blockchain
+  - `POST /api/v1/usulan/:id/dokumen-pendukung` - Upload dokumen pendukung (off-chain)
+  - `GET /api/v1/usulan/:id/audit` - Audit trail usulan dari blockchain
+
+  **Utility:**
   - `GET /api/v1/health` - **Health check** (status DB, Fabric, uptime)
     ```javascript
     // Response:
@@ -136,20 +156,56 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 * [x] **File Upload Handler**
   - Multer config untuk accept PDF (max 5MB)
   - Validasi file type via extension + mimetype
-  - Simpan file di `/uploads` folder
+  - Simpan file di `/uploads` folder (development) — production target: CDN
   - Generate SHA-256 hash dari file
+  - Hash dicatat di blockchain via chaincode (`dokumenHash`)
 
 * [x] **Database Connection**
   - Setup PostgreSQL connection pool (pg)
   - CRUD operations untuk kegiatan
 
 #### **2.3 Chaincode Development**
-* [x] **Buat chaincode sederhana** (`/chaincode/lib/kegiatanContract.js`):
+* [x] **Buat chaincode** (`/chaincode/lib/kegiatanContract.js`) — 9 fungsi sesuai DPPL:
+
+  **Fungsi Kegiatan:**
   ```javascript
-  // Minimal 3 fungsi:
-  // 1. CreateKegiatan(id, hash, metadata)
-  // 2. ReadKegiatan(id)
-  // 3. GetHistory(id) - untuk audit trail
+  // 1. CatatKegiatan(idKegiatan, hashNIP, hashDokumen, nilaiKUM, idReferensiLama)
+  //    - Simpan kegiatan dengan status "Unverified"
+  //    - Jika idReferensiLama != null → versioning (kegiatan lama harus berstatus "Rejected")
+  //    - Key: "KEGIATAN_" + idKegiatan
+  //
+  // 2. VerifikasiKegiatan(idKegiatan)
+  //    - Ubah status "Unverified" → "Verified"
+  //
+  // 3. TolakKegiatan(idKegiatan, catatanPenolakan)
+  //    - Ubah status "Unverified" → "Rejected" + simpan catatan penolakan
+  ```
+
+  **Fungsi Usulan Kenaikan Pangkat:**
+  ```javascript
+  // 4. AjukanUsulanKenaikanPangkat(idUsulan, hashNIP, totalKUM, jabatanTujuan, idUsulanLama)
+  //    - Validasi syarat KUM minimal per jabatan
+  //    - Status default: "Pending"
+  //    - Versioning jika usulan lama ditolak
+  //    - Key: "USULAN_" + idUsulan
+  //
+  // 5. ProsesUsulanKenaikanPangkat(idUsulan)
+  //    - Ubah status "Pending" → "Diproses"
+  //
+  // 6. TolakUsulanKenaikanPangkat(idUsulan, catatanPenolakan)
+  //    - Ubah status → "Rejected"
+  //
+  // 7. TerbitkanSkKenaikanPangkat(idUsulan, skHash)
+  //    - Status "Diproses" → "SK_Issued" + lock hash SK
+  ```
+
+  **Fungsi Query:**
+  ```javascript
+  // 8. GetAset(kunciAset)
+  //    - Baca state terbaru dari World State (kegiatan atau usulan)
+  //
+  // 9. GetHistoriAset(kunciAset)
+  //    - Audit trail via getHistoryForKey (TxId, timestamp, data)
   ```
 
 * [ ] **Deploy chaincode ke test-network** ⏳
@@ -173,19 +229,20 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 * [ ] **Implement Double-Commit Pattern**
   ```javascript
   // Pseudocode:
-  async function createKegiatan(data) {
+  async function catatKegiatan(data) {
     const dbClient = await pool.connect();
     try {
       await dbClient.query('BEGIN');
       
-      // 1. Insert to PostgreSQL
-      const result = await dbClient.query('INSERT INTO kegiatan...');
+      // 1. Insert to PostgreSQL (status: Unverified)
+      const result = await dbClient.query('INSERT INTO kegiatan_dosen...');
       
-      // 2. Submit to Blockchain
-      const txId = await fabricClient.submitTransaction('CreateKegiatan', ...);
+      // 2. Submit to Blockchain (CatatKegiatan)
+      const txId = await fabricClient.submitTransaction('CatatKegiatan', 
+        id, hashNIP, hashDokumen, nilaiKUM, idReferensiLama);
       
       // 3. Update txId in database
-      await dbClient.query('UPDATE kegiatan SET blockchain_tx_id = $1...', [txId]);
+      await dbClient.query('UPDATE kegiatan_dosen SET blockchain_tx_id = $1...', [txId]);
       
       await dbClient.query('COMMIT');
       return result;
@@ -240,15 +297,17 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   - Simpan JWT token di localStorage
 
 * [x] **Dashboard Dosen** (`/dashboard`)
+  - **Progress Bar KUM:** Tampilkan akumulasi KUM terverifikasi vs syarat jabatan tujuan
   - Form upload kegiatan:
     - Input: Jenis Kegiatan (dropdown)
     - Input: Deskripsi (textarea)
-    - Input: Poin KUM (number)
+    - Input: Poin KUM (auto dari referensi)
     - Upload File PDF
     - Button Submit
   - Tabel list kegiatan dengan kolom:
-    - Jenis Kegiatan, Poin, Status, Tanggal
+    - Jenis Kegiatan, Poin, Status (Unverified/Verified/Rejected), Tanggal
     - Action: View Detail
+  - Notifikasi jika KUM sudah memenuhi syarat kenaikan pangkat
 
 * [x] **Detail Kegiatan** (`/kegiatan/:id`)
   - Info kegiatan lengkap
@@ -260,16 +319,33 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   - **Audit Trail Timeline:**
     - Tampilkan history dari blockchain
     - Format: Timestamp, Action, User
+  - Jika Rejected: Tampilkan catatan penolakan + tombol "Ajukan Perbaikan"
+
+* [ ] **Halaman Usulan Kenaikan Pangkat** (`/usulan`)
+  - Form ajukan usulan (jabatan tujuan, total KUM)
+  - Upload dokumen pendukung (off-chain)
+  - Tabel list usulan + status (Pending/Diproses/SK_Issued/Rejected)
+  - Detail usulan + audit trail
+
+* [ ] **Halaman Verifikasi (Admin SDM)** (`/verifikasi`)
+  - List kegiatan dengan status "Unverified"
+  - Tombol Verifikasi / Tolak (dengan input catatan penolakan)
+  - List usulan kenaikan pangkat
+  - Tombol Proses / Tolak / Terbitkan SK (upload file SK + hash ke blockchain)
 
 #### **3.3 Components**
-* [x] `Navbar.vue` - Simple navigation
+* [x] `Navbar.vue` - Simple navigation (with role-based menu)
 * [x] `UploadForm.vue` - Reusable upload form
 * [x] `KegiatanTable.vue` - Tabel kegiatan
 * [x] `AuditTrail.vue` - Timeline component untuk history
+* [ ] `ProgressBarKUM.vue` - Progress bar akumulasi KUM vs syarat
+* [ ] `StatusBadge.vue` - Badge status (Unverified/Verified/Rejected/Pending/Diproses/SK_Issued)
+* [ ] `UsulanTable.vue` - Tabel usulan kenaikan pangkat
 
 #### **3.4 State Management (Pinia)**
 * [x] Store untuk authentication (`auth.store.js`)
 * [x] Store untuk kegiatan data (`kegiatan.store.js`)
+* [ ] Store untuk usulan kenaikan pangkat (`usulan.store.js`)
 
 #### **3.5 Integration**
 * [x] Axios interceptor untuk JWT token
@@ -281,13 +357,23 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 ### **Minggu 4: Testing, Documentation & Finalisasi** 📝
 
 #### **4.1 Manual Testing**
-* [ ] **Test Flow Lengkap:**
-  1. Register user baru
-  2. Login
-  3. Upload kegiatan dengan file PDF
-  4. Cek data masuk ke PostgreSQL
+* [ ] **Test Flow Kegiatan:**
+  1. Register user baru (dosen + admin)
+  2. Login sebagai dosen
+  3. Upload kegiatan dengan file PDF → status "Unverified"
+  4. Login sebagai admin → verifikasi kegiatan → status "Verified"
   5. Cek hash tersimpan di blockchain (via peer CLI atau API)
   6. View audit trail
+  7. Simulasi: Edit file PDF manual → verify hash → detect tampering
+  8. Test tolak kegiatan → dosen ajukan perbaikan (versioning)
+
+* [ ] **Test Flow Usulan Kenaikan Pangkat:**
+  1. Pastikan dosen punya cukup KUM (kegiatan terverifikasi)
+  2. Dosen ajukan usulan kenaikan pangkat
+  3. Admin proses usulan → status "Diproses"
+  4. Admin terbitkan SK (upload SK + hash ke blockchain) → status "SK_Issued"
+  5. Cek audit trail usulan
+  6. Test tolak usulan → dosen ajukan ulang (versioning)
   7. Simulasi: Edit file PDF manual → verify hash → detect tampering
 
 * [ ] **Test Edge Cases:**
@@ -337,12 +423,14 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
   1. Tunjukkan architecture diagram (30 detik)
   2. Tunjukkan health check endpoint — semua komponen connected (30 detik)
   3. Register & Login sebagai dosen (1 menit)
-  4. Upload kegiatan dengan PDF (2 menit)
-  5. Tunjukkan data di PostgreSQL via psql query (1 menit)
-  6. Tunjukkan hash di blockchain via peer CLI (1 menit)
-  7. **Tampering demo:** edit file PDF manual → verify → detect hash mismatch (2 menit)
-  8. Tunjukkan audit trail timeline (1 menit)
-  9. Closing: architecture recap & kesimpulan (30 detik)
+  4. Upload kegiatan dengan PDF → tunjukkan status "Unverified" (2 menit)
+  5. Login sebagai Admin SDM → verifikasi kegiatan → status "Verified" (1 menit)
+  6. Tunjukkan progress bar KUM bertambah (30 detik)
+  7. Tunjukkan hash di blockchain via peer CLI (1 menit)
+  8. **Tampering demo:** edit file PDF manual → verify → detect hash mismatch (2 menit)
+  9. Ajukan usulan kenaikan pangkat → Admin proses → Terbitkan SK (2 menit)
+  10. Tunjukkan audit trail timeline (kegiatan + usulan) (1 menit)
+  11. Closing: architecture recap & kesimpulan (30 detik)
   > **Tip:** Record demo video dari awal pengerjaan, jadi ada backup jika ada bug mendadak
 
 #### **4.5 Deployment & Reproducibility**
@@ -402,20 +490,25 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 
 ### Must Have (P0) - Wajib ada untuk lulus
 - [x] Database PostgreSQL dengan minimal 2 tabel
-- [x] Backend API dengan minimal 4 endpoints
+- [x] Backend API dengan endpoints kegiatan + usulan
 - [x] File upload & SHA-256 hashing
-- [x] Integration dengan Hyperledger Fabric (submit & read)
-- [x] Frontend web dengan minimal 3 halaman
+- [x] Integration dengan Hyperledger Fabric (9 fungsi chaincode)
+- [x] Frontend web dengan minimal 4 halaman (login, dashboard, detail kegiatan, verifikasi)
 - [x] Authentication sederhana (login/register)
-- [x] Audit trail dari blockchain
+- [x] Audit trail dari blockchain (kegiatan + usulan)
 - [x] Hash verification demo
+- [ ] Alur verifikasi kegiatan (Unverified → Verified / Rejected)
+- [ ] Alur usulan kenaikan pangkat (Pending → Diproses → SK_Issued / Rejected)
+- [ ] Monitoring KUM (progress bar)
+- [ ] Mekanisme versioning (perbaikan kegiatan/usulan yang ditolak)
 
 ### Nice to Have (P1) - Nilai tambah
 - [ ] Pretty UI/UX dengan Tailwind
-- [ ] Real-time notification
+- [ ] Real-time notification (KUM memenuhi syarat)
 - [ ] Export data ke PDF/Excel
 - [ ] Advanced filtering & search
 - [ ] Dashboard statistics (chart)
+- [ ] Upload dokumen pendukung SK (off-chain)
 
 ### Should Have (P1.5) - Minimal security untuk demo aman
 - [ ] Input sanitization (cegah XSS/SQL injection di demo)
@@ -424,9 +517,8 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 - [ ] Health check endpoint
 
 ### Can Skip (P2) - Tidak perlu untuk tugas kuliah
-- [ ] Multiple user roles dengan permission
 - [ ] Email notification
-- [ ] Production deployment
+- [ ] Production deployment / CDN
 - [ ] Rate limiting, CSRF protection
 - [ ] Monitoring & logging
 - [ ] CI/CD pipeline
@@ -440,10 +532,13 @@ Tugas kuliah dianggap **berhasil** jika:
 1. ✅ Aplikasi bisa running (frontend + backend + blockchain)
 2. ✅ User bisa upload kegiatan dengan file PDF
 3. ✅ Hash file tersimpan di blockchain (bisa dibuktikan)
-4. ✅ Bisa menampilkan audit trail dari blockchain
-5. ✅ Bisa detect jika file sudah diubah (hash berbeda)
-6. ✅ Ada dokumentasi lengkap (laporan + slide + demo video)
-7. ✅ Code di-push ke GitHub repository
+4. ✅ Admin bisa verifikasi/tolak kegiatan (status berubah di blockchain)
+5. ✅ Dosen bisa ajukan kenaikan pangkat → Admin terbitkan SK (hash SK on-chain)
+6. ✅ Bisa menampilkan audit trail dari blockchain
+7. ✅ Bisa detect jika file sudah diubah (hash berbeda)
+8. ✅ Progress bar KUM menunjukkan akumulasi poin terverifikasi
+9. ✅ Ada dokumentasi lengkap (laporan + slide + demo video)
+10. ✅ Code di-push ke GitHub repository
 
 ---
 
@@ -455,7 +550,7 @@ Tugas kuliah dianggap **berhasil** jika:
 
 ### Week 2
 - **Backend dulu, frontend kemudian.** Test API dengan Postman dulu sebelum bikin UI
-- **Chaincode sesederhana mungkin.** 3 fungsi cukup: Create, Read, GetHistory
+- **Chaincode:** Implementasi 9 fungsi tapi masing-masing relatif sederhana (CRUD + state transition)
 - Gunakan template/boilerplate jika ada untuk save time
 
 ### Week 3
@@ -537,25 +632,64 @@ CREATE TABLE kegiatan_dosen (
   deskripsi TEXT,
   poin_kum DECIMAL(5,2) NOT NULL,
   file_name VARCHAR(255),
-  file_path VARCHAR(500),  -- Full path to file
+  file_path VARCHAR(500),  -- Full path to file (dev: /uploads, prod: CDN URL)
   file_hash VARCHAR(64) NOT NULL,
   blockchain_tx_id VARCHAR(100),
   
-  status VARCHAR(20) DEFAULT 'pending',
-  verified_by INTEGER REFERENCES users(id),  -- Siapa yang verify
+  -- Status: Unverified, Verified, Rejected (sesuai DPPL)
+  status VARCHAR(20) DEFAULT 'Unverified',
+  versi INTEGER DEFAULT 1,                    -- Versioning
+  referensi_ke INTEGER REFERENCES kegiatan_dosen(id),  -- Referensi ke kegiatan lama (jika perbaikan)
+  verified_by INTEGER REFERENCES users(id),   -- Siapa yang verify
   verified_at TIMESTAMP,
-  rejection_reason TEXT,  -- Jika ditolak
+  rejection_reason TEXT,                      -- Catatan penolakan (on-chain juga)
   
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   deleted_at TIMESTAMP
 );
 
+-- usulan_pangkat table (alur kenaikan pangkat)
+CREATE TABLE usulan_pangkat (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  jabatan_tujuan VARCHAR(50) NOT NULL,  -- Asisten Ahli, Lektor, Lektor Kepala, Guru Besar
+  total_kum DECIMAL(8,2) NOT NULL,
+  blockchain_tx_id VARCHAR(100),
+  
+  -- Status: Pending, Diproses, SK_Issued, Rejected (sesuai DPPL)
+  status VARCHAR(20) DEFAULT 'Pending',
+  versi INTEGER DEFAULT 1,
+  referensi_ke INTEGER REFERENCES usulan_pangkat(id),  -- Versioning
+  catatan_penolakan TEXT,
+  
+  -- SK fields
+  sk_file_path VARCHAR(500),
+  sk_file_hash VARCHAR(64),
+  sk_blockchain_tx_id VARCHAR(100),
+  
+  processed_by INTEGER REFERENCES users(id),
+  processed_at TIMESTAMP,
+  
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- dokumen_pendukung table (off-chain, untuk usulan SK)
+CREATE TABLE dokumen_pendukung (
+  id SERIAL PRIMARY KEY,
+  usulan_id INTEGER REFERENCES usulan_pangkat(id),
+  file_name VARCHAR(255),
+  file_path VARCHAR(500),
+  file_hash VARCHAR(64),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Audit logs table (tambahkan sejak awal!)
 CREATE TABLE audit_logs (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
-  action VARCHAR(50) NOT NULL,  -- 'CREATE', 'UPDATE', 'DELETE', 'VERIFY'
+  action VARCHAR(50) NOT NULL,  -- 'CREATE', 'VERIFY', 'REJECT', 'SUBMIT_USULAN', 'ISSUE_SK'
   table_name VARCHAR(50) NOT NULL,
   record_id INTEGER NOT NULL,
   old_values JSONB,
@@ -568,6 +702,8 @@ CREATE TABLE audit_logs (
 -- Index untuk performance (wajib!)
 CREATE INDEX idx_kegiatan_user_id ON kegiatan_dosen(user_id);
 CREATE INDEX idx_kegiatan_status ON kegiatan_dosen(status);
+CREATE INDEX idx_usulan_user_id ON usulan_pangkat(user_id);
+CREATE INDEX idx_usulan_status ON usulan_pangkat(status);
 CREATE INDEX idx_audit_user_id ON audit_logs(user_id);
 CREATE INDEX idx_audit_created_at ON audit_logs(created_at);
 ```
@@ -632,18 +768,32 @@ const router = express.Router();
 // Version 1 routes
 router.use('/api/v1/auth', require('./v1/auth'));
 router.use('/api/v1/kegiatan', require('./v1/kegiatan'));
+router.use('/api/v1/usulan', require('./v1/usulan'));
 router.use('/api/v1/users', require('./v1/users'));
 
 module.exports = router;
 ```
 
 **Konsisten dengan naming:**
+
+Kegiatan:
 - `GET /api/v1/kegiatan` - List all
 - `GET /api/v1/kegiatan/:id` - Get one
-- `POST /api/v1/kegiatan` - Create
-- `PUT /api/v1/kegiatan/:id` - Update
-- `DELETE /api/v1/kegiatan/:id` - Delete
+- `POST /api/v1/kegiatan` - Catat kegiatan
+- `POST /api/v1/kegiatan/:id/perbaikan` - Ajukan perbaikan (versioning)
+- `PUT /api/v1/kegiatan/:id/verifikasi` - Admin: Verifikasi
+- `PUT /api/v1/kegiatan/:id/tolak` - Admin: Tolak
 - `GET /api/v1/kegiatan/:id/audit` - Audit trail
+
+Usulan Kenaikan Pangkat:
+- `GET /api/v1/usulan` - List all
+- `GET /api/v1/usulan/:id` - Get one
+- `POST /api/v1/usulan` - Ajukan usulan
+- `PUT /api/v1/usulan/:id/proses` - Admin: Proses
+- `PUT /api/v1/usulan/:id/tolak` - Admin: Tolak
+- `PUT /api/v1/usulan/:id/terbitkan-sk` - Admin: Terbitkan SK
+- `POST /api/v1/usulan/:id/dokumen-pendukung` - Upload dokumen pendukung
+- `GET /api/v1/usulan/:id/audit` - Audit trail
 
 #### **5. Error Handling - Centralized**
 
@@ -682,29 +832,25 @@ module.exports = (err, req, res, next) => {
 
 #### **6. Chaincode - Extensible Functions**
 
-**✅ Structure chaincode dengan baik:**
+**✅ Structure chaincode sesuai DPPL (9 fungsi):**
 ```javascript
-// chaincode/lib/kegiatan.js
+// chaincode/lib/kegiatanContract.js
 class KegiatanContract extends Contract {
   
-  // CRUD operations
-  async createKegiatan(ctx, id, data) { }
-  async readKegiatan(ctx, id) { }
-  async updateKegiatan(ctx, id, data) { }
-  async deleteKegiatan(ctx, id) { }
+  // Kegiatan operations
+  async CatatKegiatan(ctx, idKegiatan, hashNIP, hashDokumen, nilaiKUM, idReferensiLama) { }
+  async VerifikasiKegiatan(ctx, idKegiatan) { }
+  async TolakKegiatan(ctx, idKegiatan, catatanPenolakan) { }
+  
+  // Usulan Kenaikan Pangkat operations
+  async AjukanUsulanKenaikanPangkat(ctx, idUsulan, hashNIP, totalKUM, jabatanTujuan, idUsulanLama) { }
+  async ProsesUsulanKenaikanPangkat(ctx, idUsulan) { }
+  async TolakUsulanKenaikanPangkat(ctx, idUsulan, catatanPenolakan) { }
+  async TerbitkanSkKenaikanPangkat(ctx, idUsulan, skHash) { }
   
   // Query operations
-  async queryKegiatanByUser(ctx, userId) { }
-  async queryKegiatanByStatus(ctx, status) { }
-  
-  // Audit
-  async getHistory(ctx, id) { }
-  
-  // Future: Access control
-  async _checkPermission(ctx, action, resourceId) {
-    // Implement later
-    return true;
-  }
+  async GetAset(ctx, kunciAset) { }
+  async GetHistoriAset(ctx, kunciAset) { }
 }
 ```
 
@@ -719,19 +865,29 @@ class KegiatanContract extends Contract {
       Input.vue
       Modal.vue
       Table.vue
+      StatusBadge.vue
+      ProgressBarKUM.vue
     /kegiatan
       KegiatanForm.vue
       KegiatanTable.vue
       KegiatanDetail.vue
+    /usulan
+      UsulanForm.vue
+      UsulanTable.vue
+      UsulanDetail.vue
     /audit
       AuditTrail.vue
   /views
     Dashboard.vue
     KegiatanList.vue
     KegiatanDetail.vue
+    UsulanList.vue
+    UsulanDetail.vue
+    VerifikasiList.vue  ← Admin SDM
   /stores
     auth.js
     kegiatan.js
+    usulan.js
   /services
     api.js  ← Centralized API calls
   /utils
@@ -913,5 +1069,5 @@ Jika ingin lanjutkan jadi production app, lihat [plan-full.md](plan-full.md) unt
 *Dokumen ini adalah versi simplified untuk tugas kuliah 1 bulan.*  
 *Untuk production planning, refer to [plan-full.md](plan-full.md)*  
 *Audit & rekomendasi: lihat [docs/AUDIT_PLAN.md](docs/AUDIT_PLAN.md)*  
-*Last Updated: April 29, 2026*  
-*Version: MVP 1.1 — Updated based on audit recommendations*
+*Last Updated: May 14, 2026*  
+*Version: MVP 1.2 — Updated: chaincode 9 fungsi, alur usulan kenaikan pangkat, status naming sesuai DPPL*
