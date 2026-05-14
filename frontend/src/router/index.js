@@ -34,6 +34,21 @@ const routes = [
         component: () => import('@/views/kegiatan/KegiatanDetail.vue'),
       },
       {
+        path: 'usulan',
+        name: 'usulan',
+        component: () => import('@/views/usulan/UsulanList.vue'),
+      },
+      {
+        path: 'usulan/create',
+        name: 'usulan-create',
+        component: () => import('@/views/usulan/UsulanCreate.vue'),
+      },
+      {
+        path: 'usulan/:id',
+        name: 'usulan-detail',
+        component: () => import('@/views/usulan/UsulanDetail.vue'),
+      },
+      {
         path: 'verifikasi',
         name: 'verifikasi',
         component: () => import('@/views/verifikasi/VerifikasiList.vue'),

@@ -49,7 +49,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { LayoutDashboard, FileText, CheckSquare, User } from 'lucide-vue-next'
+import { LayoutDashboard, FileText, CheckSquare, User, Award } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 
 defineProps({
@@ -65,15 +65,17 @@ const menuItems = computed(() => {
     { name: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/' },
   ]
   
-  // Menu untuk dosen: Kegiatan Saya
+  // Menu untuk dosen: Kegiatan Saya + Usulan
   if (!auth.canVerify) {
     items.push({ name: 'kegiatan', label: 'Kegiatan Saya', icon: FileText, to: '/kegiatan' })
+    items.push({ name: 'usulan', label: 'Usulan Pangkat', icon: Award, to: '/usulan' })
   }
   
-  // Menu untuk admin/pimpinan/superadmin: Verifikasi + Semua Kegiatan
+  // Menu untuk admin/pimpinan/superadmin: Verifikasi + Semua Kegiatan + Usulan
   if (auth.canVerify) {
     items.push({ name: 'verifikasi', label: 'Verifikasi', icon: CheckSquare, to: '/verifikasi' })
     items.push({ name: 'kegiatan', label: 'Semua Kegiatan', icon: FileText, to: '/kegiatan' })
+    items.push({ name: 'usulan', label: 'Usulan Pangkat', icon: Award, to: '/usulan' })
   }
   
   items.push({ name: 'profil', label: 'Profil', icon: User, to: '/profil' })
