@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Hyperledger Fabric Network Setup Script (Windows PowerShell)
 # Downloads fabric-samples, binaries, and Docker images
 # ============================================================
@@ -16,16 +16,16 @@ Write-Host ""
 # Check Docker
 try {
     docker info 2>$null | Out-Null
-    Write-Host "✅ Docker is running" -ForegroundColor Green
+    Write-Host "Ã¢Å"â€¦ Docker is running" -ForegroundColor Green
 } catch {
-    Write-Host "❌ Docker is not running. Please start Docker Desktop." -ForegroundColor Red
+    Write-Host "Ã¢ÂÅ' Docker is not running. Please start Docker Desktop." -ForegroundColor Red
     exit 1
 }
 
 # Download Fabric samples
 if (!(Test-Path "fabric-samples")) {
     Write-Host ""
-    Write-Host "📦 Downloading Hyperledger Fabric samples, binaries, and Docker images..." -ForegroundColor Yellow
+    Write-Host "Ã°Å¸"Â¦ Downloading Hyperledger Fabric samples, binaries, and Docker images..." -ForegroundColor Yellow
     Write-Host "   This may take several minutes..."
     Write-Host ""
     
@@ -38,7 +38,7 @@ if (!(Test-Path "fabric-samples")) {
     } elseif (Get-Command bash -ErrorAction SilentlyContinue) {
         bash ./install-fabric.sh --fabric-version $FABRIC_VERSION --ca-version $CA_VERSION
     } else {
-        Write-Host "❌ Need WSL or Git Bash to run Fabric install script." -ForegroundColor Red
+        Write-Host "Ã¢ÂÅ' Need WSL or Git Bash to run Fabric install script." -ForegroundColor Red
         Write-Host "   Install WSL: wsl --install" -ForegroundColor Yellow
         Remove-Item "install-fabric.sh" -ErrorAction SilentlyContinue
         exit 1
@@ -46,11 +46,11 @@ if (!(Test-Path "fabric-samples")) {
     
     Remove-Item "install-fabric.sh" -ErrorAction SilentlyContinue
 } else {
-    Write-Host "✅ fabric-samples already exists" -ForegroundColor Green
+    Write-Host "Ã¢Å"â€¦ fabric-samples already exists" -ForegroundColor Green
 }
 
 Write-Host ""
-Write-Host "✅ Setup complete!" -ForegroundColor Green
+Write-Host "Ã¢Å"â€¦ Setup complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Run: .\start-network.ps1"

@@ -1,4 +1,4 @@
-# Stop Fabric Network (Windows PowerShell)
+﻿# Stop Fabric Network (Windows PowerShell)
 
 $SCRIPT_DIR = $PSScriptRoot
 $testNetworkDir = "$SCRIPT_DIR\fabric-samples\test-network"
@@ -10,6 +10,6 @@ $wslPath = if ($shell -eq "wsl") {
     $testNetworkDir -replace '\\','/'
 }
 
-Write-Host "🛑 Stopping Fabric network..." -ForegroundColor Yellow
+Write-Host "ðŸ›' Stopping Fabric network..." -ForegroundColor Yellow
 & $shell -c "cd '$wslPath' && ./network.sh down"
-Write-Host "✅ Network stopped." -ForegroundColor Green
+Write-Host "âœ... Network stopped." -ForegroundColor Green

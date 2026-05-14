@@ -9,7 +9,7 @@
     "enroll": "node enrollUser.js"
   },
   "dependencies": {
-    "fabric-ca-client": "^2.5.0",
-    "fabric-network": "^2.5.0"
+    "fabric-ca-client": "^2.2.20",
+    "fabric-network": "^2.2.20"
   }
 }
