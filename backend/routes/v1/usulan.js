@@ -210,7 +210,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'CREATE', 'usulan_kenaikan_pangkat', usulan.id, JSON.stringify({
         jabatan_tujuan, total_poin: totalPoin, blockchain_tx: txResult ? 'success' : 'skipped',
       })]
@@ -246,7 +246,7 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'diproses', blockchain_tx: txResult ? 'success' : 'skipped',
       })]
@@ -286,7 +286,7 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'REJECT', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'rejected', catatan_penolakan, blockchain_tx: txResult ? 'success' : 'skipped',
       })]
@@ -344,7 +344,7 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'ISSUE_SK', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'sk_issued', sk_number, sk_document_hash,
         blockchain_tx: txResult ? 'success' : 'skipped',
