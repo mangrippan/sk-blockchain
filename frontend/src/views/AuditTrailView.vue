@@ -141,10 +141,14 @@ async function searchAuditTrail() {
   try {
     const { data } = await usulanApi.getAll()
     
-    // Filter by search query (ID or email)
+    // Filter by search query
+    // ID: prefix match (startsWith) - lebih akurat untuk UUID
+    // NIP/Email: partial match (includes) - bisa search nama tengah
+    const query = searchQuery.value.trim().toLowerCase()
+    
     results.value = data.data.filter(u => 
-      u.id.includes(searchQuery.value) || 
-      u.nip_nidn?.toLowerCase().includes(searchQuery.value.toLowerCase())
+      u.id.toLowerCase().startsWith(query) || 
+      u.nip_nidn?.toLowerCase().includes(query)
     )
   } catch (error) {
     console.error('Search error:', error)

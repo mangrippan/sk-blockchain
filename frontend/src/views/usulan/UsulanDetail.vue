@@ -122,12 +122,23 @@
           </div>
         </div>
         <div v-if="sortedAuditTrail.length === 0" class="text-gray-500 text-sm">Belum ada riwayat</div>
-        <div v-else class="space-y-4">
-          <div
-            v-for="(entry, idx) in sortedAuditTrail"
-            :key="idx"
-            class="border-l-4 pl-4 py-2"
-            :class="{
+        <div v-else>
+          <!-- Info: No Blockchain Data -->
+          <div v-if="!hasBlockchainData" class="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+            <div class="flex items-start gap-2">
+              <span class="text-amber-600">ℹ️</span>
+              <div class="text-amber-800">
+                <span class="font-medium">Usulan lama:</span> Data blockchain hanya tersedia untuk usulan yang dibuat setelah blockchain diaktifkan.
+              </div>
+            </div>
+          </div>
+          
+          <div class="space-y-4">
+            <div
+              v-for="(entry, idx) in sortedAuditTrail"
+              :key="idx"
+              class="border-l-4 pl-4 py-2"
+              :class="{
               'border-blue-400': entry.source === 'blockchain',
               'border-green-400': entry.category === 'Kegiatan' || entry.source === 'kegiatan',
               'border-purple-400': entry.category === 'Usulan' && entry.source !== 'blockchain',
@@ -139,25 +150,21 @@
                 <div class="flex items-center gap-2 mb-1 flex-wrap">
                   <p class="text-sm font-semibold text-gray-900">{{ entry.action || entry.status }}</p>
                   
-                  <!-- Category Badge -->
-                  <span 
-                    v-if="entry.category"
-                    class="text-xs px-2 py-0.5 rounded-full font-medium"
-                    :class="entry.category === 'Kegiatan' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'"
-                  >
-                    {{ entry.category === 'Kegiatan' ? '📚 Kegiatan' : '📝 Usulan' }}
-                  </span>
-                  
                   <!-- Source Badge -->
                   <span 
                     v-if="entry.source"
                     class="text-xs px-2 py-0.5 rounded-full font-medium"
                     :class="{
                       'bg-blue-100 text-blue-700': entry.source === 'blockchain',
-                      'bg-gray-100 text-gray-700': entry.source === 'database' || entry.source === 'kegiatan'
+                      'bg-green-100 text-green-700': entry.source === 'kegiatan',
+                      'bg-purple-100 text-purple-700': entry.source === 'database' || entry.source === 'usulan'
                     }"
                   >
-                    {{ entry.source === 'blockchain' ? '⛓️ Blockchain' : '💾 Database' }}
+                    {{ 
+                      entry.source === 'blockchain' ? '⛓️ Blockchain' : 
+                      entry.source === 'kegiatan' ? '📝 Kegiatan' :
+                      '📋 Usulan'
+                    }}
                   </span>
                 </div>
                 
@@ -192,6 +199,7 @@
             </div>
           </div>
         </div>
+      </div>
       </div>
     </template>
 
@@ -252,6 +260,11 @@ const sortedAuditTrail = computed(() => {
   })
   
   return sorted
+})
+
+// Check if there's any blockchain data
+const hasBlockchainData = computed(() => {
+  return auditTrail.value.some(entry => entry.source === 'blockchain')
 })
 
 function toggleSortOrder() {
