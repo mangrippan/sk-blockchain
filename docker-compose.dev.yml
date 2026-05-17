@@ -12,13 +12,13 @@ services:
       POSTGRES_DB: chainrank_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres123
-      # Auth method for development (trust = no password needed)
-      POSTGRES_HOST_AUTH_METHOD: trust
+      # MD5 auth for better compatibility with Node.js pg library
+      POSTGRES_HOST_AUTH_METHOD: md5
       # Performance tuning for development
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
 
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
     volumes:
       # Persistent data storage

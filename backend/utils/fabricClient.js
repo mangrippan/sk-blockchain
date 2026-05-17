@@ -60,7 +60,7 @@ async function connectGateway() {
     await gateway.connect(ccp, {
       wallet,
       identity: 'appUser',
-      discovery: { enabled: true, asLocalhost: true },
+      discovery: { enabled: false }, // Disable discovery for now
     });
 
     const network = await gateway.getNetwork(CHANNEL_NAME);
