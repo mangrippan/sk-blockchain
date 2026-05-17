@@ -6,6 +6,23 @@
 
 ---
 
+## 📊 Progress Dashboard
+
+| Minggu | Focus Area | Status | Progress |
+|--------|-----------|--------|----------|
+| **Week 1** | Infrastruktur & Database | 🟡 In Progress | 80% (4/5 done) |
+| **Week 2** | Backend & Blockchain | ⚪ Not Started | 0% (0/4 done) |
+| **Week 3** | Frontend Development | ⚪ Not Started | 0% (0/5 done) |
+| **Week 4** | Testing & Documentation | ⚪ Not Started | 0% (0/5 done) |
+
+### ⚡ Immediate Next Steps
+1. **[URGENT]** Setup Hyperledger Fabric test-network (Minggu 1.4)
+2. Deploy chaincode ke Fabric network
+3. Test koneksi Backend ↔ Fabric via SDK
+4. Mulai frontend development (halaman login & dashboard)
+
+---
+
 ## 🎯 Tujuan MVP
 Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
 1. ✅ Pencatatan kegiatan dosen ke database PostgreSQL + hash ke Hyperledger Fabric
@@ -73,9 +90,31 @@ Membuat **Proof of Concept** sistem hybrid yang mendemonstrasikan:
 Lihat progress lengkap di: [docs/WEEK1_PROGRESS.md](docs/WEEK1_PROGRESS.md)
 Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 
+#### **🎯 Minggu 1 Summary**
+**✅ Completed:**
+- Repository setup & struktur folder
+- PostgreSQL database dengan Docker Compose
+- Schema database (`database/schema.sql`)
+- Seed data (6 users, 8 kegiatan sample)
+- Backend project initialized
+- Environment variables configured
+
+**⏳ Pending (URGENT):**
+- Hyperledger Fabric test-network setup & running
+
+**📝 Deliverables:**
+- [x] Working database dengan sample data
+- [x] Docker Compose development environment
+- [ ] Fabric network running
+- [ ] Dokumentasi setup di README.md
+
+**⏰ Time Spent:** ~6-8 hours (setup time)  
+**🎓 Learning Points:** Docker basics, PostgreSQL schema design, Fabric architecture
+
 ---
 
 ### **Minggu 2: Backend Development** 💻
+**Target:** Backend API + Blockchain integration selesai & tested
 
 #### **2.1 Express.js Backend Setup**
 * [x] Initialize project: `npm init -y`
@@ -218,6 +257,30 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 
 * [ ] **Test chaincode** dengan peer CLI commands
 
+#### **🎯 Minggu 2 Summary**
+**Target Deliverables:**
+- [ ] 9 fungsi chaincode deployed & tested
+- [ ] Backend API dengan 15+ endpoints working
+- [ ] Double-commit pattern implemented (DB + Blockchain)
+- [ ] File upload & hashing working
+- [ ] Postman collection untuk testing
+- [ ] Health check endpoint
+
+**🎯 Success Criteria:**
+- Bisa catat kegiatan via API → tersimpan di DB + hash di blockchain
+- Bisa verify/tolak kegiatan → status berubah di blockchain
+- Audit trail bisa diambil dari blockchain history
+- Fallback mode (DB-only) working jika Fabric down
+
+**⏰ Estimated Time:** 15-20 hours  
+**🔑 Critical Path:** Chaincode deployment → SDK integration → API testing
+
+**📌 Tips Minggu 2:**
+- Test chaincode dengan peer CLI dulu sebelum bikin API
+- Gunakan Postman untuk test API sebelum buat frontend
+- Commit code setiap fungsi selesai (granular commits)
+- Jika stuck di Fabric >2 jam, tanya dosen/teman
+
 #### **2.4 Fabric SDK Integration**
 * [x] Install Fabric SDK: `npm install fabric-network`
 * [x] Buat utility function untuk:
@@ -278,6 +341,7 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 ---
 
 ### **Minggu 3: Frontend Development** 🎨
+**Target:** UI/UX complete & integrated dengan backend
 
 #### **3.1 Vue.js Setup**
 * [x] Create Vue project:
@@ -352,9 +416,35 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 * [x] API calls ke backend
 * [x] Error handling & loading states
 
+#### **🎯 Minggu 3 Summary**
+**Target Deliverables:**
+- [ ] 4-5 halaman web (Login, Dashboard, Detail, Usulan, Verifikasi)
+- [ ] Components reusable & modular
+- [ ] Full integration dengan backend API
+- [ ] State management dengan Pinia
+- [ ] Responsive design (desktop + mobile)
+
+**🎯 Success Criteria:**
+- User bisa login & navigate antar halaman
+- Dosen bisa upload kegiatan via form → tampil di tabel
+- Admin bisa verify/tolak kegiatan dari UI
+- Progress bar KUM update otomatis saat kegiatan diverifikasi
+- Audit trail tampil di UI dengan timeline yang jelas
+- Hash verification display working (✅ Valid / ❌ Tampered)
+
+**⏰ Estimated Time:** 12-15 hours  
+**🔑 Critical Path:** Pages → Components → Integration → Styling
+
+**📌 Tips Minggu 3:**
+- Gunakan template/boilerplate Tailwind untuk UI cepat
+- Test tiap halaman setelah selesai (jangan nunggu semuanya)
+- Focus pada functionality dulu, styling belakangan
+- Gunakan component library (Headless UI, DaisyUI) untuk save time
+
 ---
 
 ### **Minggu 4: Testing, Documentation & Finalisasi** 📝
+**Target:** Siap demo & submit
 
 #### **4.1 Manual Testing**
 * [ ] **Test Flow Kegiatan:**
@@ -454,6 +544,39 @@ Quick reference database: [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 * [ ] `.env.example` untuk environment variables
 * [ ] Postman Collection (`docs/ChainRank.postman_collection.json`)
 * [ ] Deployment instructions
+
+#### **🎯 Minggu 4 Summary**
+**Target Deliverables:**
+- [ ] Aplikasi tested end-to-end (all flows working)
+- [ ] Dokumentasi lengkap (README, Laporan, Slide, Video)
+- [ ] Demo script siap
+- [ ] Docker Compose untuk full stack
+- [ ] Code cleanup & formatting
+- [ ] Repository di GitHub (public/private)
+
+**🎯 Success Criteria:**
+- Bisa running full stack dengan 1 command (`docker-compose up`)
+- Demo 10-12 menit tanpa bug critical
+- Hash verification demo working (tampering detection)
+- Audit trail demo clear & convincing
+- Laporan tugas lengkap dengan screenshots
+- Video demo tersimpan sebagai backup
+
+**⏰ Estimated Time:** 10-15 hours  
+**🔑 Critical Path:** Testing → Bug fixes → Documentation → Demo practice
+
+**📌 Tips Minggu 4:**
+- **Jangan coding fitur baru!** Focus on testing & dokumentasi
+- Record demo video ASAP (backup jika ada bug saat presentasi)
+- Test di environment bersih (docker fresh install)
+- Practice demo script minimal 3x
+- Prepare Plan B jika Fabric down saat demo (fallback mode)
+
+**⚠️ Common Pitfalls Minggu 4:**
+- Terlalu banyak bug fix last minute → introduce new bugs
+- Dokumentasi terburu-buru → typos & missing info
+- Video demo terlalu panjang (keep it 5-10 min max)
+- Tidak test di environment bersih → "works on my machine" syndrome
 
 ---
 
@@ -1069,5 +1192,53 @@ Jika ingin lanjutkan jadi production app, lihat [plan-full.md](plan-full.md) unt
 *Dokumen ini adalah versi simplified untuk tugas kuliah 1 bulan.*  
 *Untuk production planning, refer to [plan-full.md](plan-full.md)*  
 *Audit & rekomendasi: lihat [docs/AUDIT_PLAN.md](docs/AUDIT_PLAN.md)*  
-*Last Updated: May 14, 2026*  
-*Version: MVP 1.2 — Updated: chaincode 9 fungsi, alur usulan kenaikan pangkat, status naming sesuai DPPL*
+*Last Updated: May 17, 2026*  
+*Version: MVP 1.3 — Updated: Progress tracking, weekly summaries, immediate next steps*
+
+---
+
+## 🎯 Quick Action Guide — What To Do RIGHT NOW
+
+### If You're at Minggu 1 (80% done):
+**Next Action:** Setup Hyperledger Fabric test-network (URGENT!)
+```bash
+cd fabric-network
+git clone https://github.com/hyperledger/fabric-samples.git
+cd fabric-samples/test-network
+./network.sh up createChannel -c mychannel -ca
+```
+**Time Required:** 1-2 hours  
+**Blocker:** None (should work if Docker running)
+
+### If Fabric is Running:
+**Next Action:** Deploy chaincode
+1. Package chaincode (see section 2.3)
+2. Install, approve, commit
+3. Test with peer CLI
+4. Then move to backend API development
+
+### If Backend API is Done:
+**Next Action:** Start frontend development (Minggu 3)
+1. Create Vue project
+2. Build login page first (quick win!)
+3. Then dashboard & kegiatan pages
+4. Integration with backend last
+
+### If Everything is Working:
+**Next Action:** Testing & Documentation (Minggu 4)
+1. Manual testing all flows
+2. Record demo video (backup!)
+3. Write documentation (laporan + slide)
+4. Practice demo 3x
+
+### Stuck or Confused?
+1. Check the weekly summary for current week
+2. Refer to Tips section for that week
+3. Check Common Pitfalls section
+4. Ask dosen/teman if stuck >2 hours
+
+---
+
+**💡 Remember:** Focus on getting it **working** first, then make it **pretty**. MVP is about demonstrating the concept, not perfection!
+
+**🎓 Good luck with your project!**
