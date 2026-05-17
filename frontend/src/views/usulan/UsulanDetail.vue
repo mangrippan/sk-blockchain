@@ -101,18 +101,94 @@
 
       <!-- Audit Trail -->
       <div class="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Audit Trail</h2>
-        <div v-if="auditTrail.length === 0" class="text-gray-500 text-sm">Belum ada riwayat</div>
-        <div v-else class="space-y-3">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900">
+            Audit Trail Lengkap
+            <span v-if="sortedAuditTrail.length > 0" class="text-sm font-normal text-gray-500">
+              ({{ sortedAuditTrail.length }} riwayat)
+            </span>
+          </h2>
+          <div v-if="sortedAuditTrail.length > 0" class="flex flex-col items-end gap-1">
+            <span class="text-xs text-gray-600">
+              Urutkan:
+            </span>
+            <button
+              @click="toggleSortOrder"
+              class="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <span>{{ sortOrder === 'asc' ? '📅 Terlama' : '📅 Terbaru' }}</span>
+              <span class="text-xs">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+            </button>
+          </div>
+        </div>
+        <div v-if="sortedAuditTrail.length === 0" class="text-gray-500 text-sm">Belum ada riwayat</div>
+        <div v-else class="space-y-4">
           <div
-            v-for="(entry, idx) in auditTrail"
+            v-for="(entry, idx) in sortedAuditTrail"
             :key="idx"
-            class="flex gap-3 items-start border-l-2 border-blue-200 pl-4 py-1"
+            class="border-l-4 pl-4 py-2"
+            :class="{
+              'border-blue-400': entry.source === 'blockchain',
+              'border-green-400': entry.category === 'Kegiatan' || entry.source === 'kegiatan',
+              'border-purple-400': entry.category === 'Usulan' && entry.source !== 'blockchain',
+              'border-gray-300': !entry.source && !entry.category
+            }"
           >
-            <div>
-              <p class="text-sm font-medium text-gray-900">{{ entry.action || entry.status }}</p>
-              <p class="text-xs text-gray-500">{{ formatDate(entry.timestamp || entry.created_at) }}</p>
-              <p v-if="entry.txId" class="text-xs text-gray-400 font-mono">TX: {{ entry.txId }}</p>
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                  <p class="text-sm font-semibold text-gray-900">{{ entry.action || entry.status }}</p>
+                  
+                  <!-- Category Badge -->
+                  <span 
+                    v-if="entry.category"
+                    class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="entry.category === 'Kegiatan' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'"
+                  >
+                    {{ entry.category === 'Kegiatan' ? '📚 Kegiatan' : '📝 Usulan' }}
+                  </span>
+                  
+                  <!-- Source Badge -->
+                  <span 
+                    v-if="entry.source"
+                    class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="{
+                      'bg-blue-100 text-blue-700': entry.source === 'blockchain',
+                      'bg-gray-100 text-gray-700': entry.source === 'database' || entry.source === 'kegiatan'
+                    }"
+                  >
+                    {{ entry.source === 'blockchain' ? '⛓️ Blockchain' : '💾 Database' }}
+                  </span>
+                </div>
+                
+                <div class="flex items-center gap-3 text-xs text-gray-500 mb-1">
+                  <span>{{ formatDate(entry.timestamp || entry.created_at) }}</span>
+                  <span v-if="entry.user_name" class="text-gray-600">
+                    👤 {{ entry.user_name }}
+                  </span>
+                </div>
+                
+                <div v-if="entry.description" class="text-xs text-gray-600 mt-1">
+                  {{ entry.description }}
+                </div>
+                
+                <div v-if="entry.old_values || entry.new_values" class="text-xs mt-2 space-y-1 bg-gray-50 p-2 rounded">
+                  <div v-if="entry.old_values" class="text-red-600">
+                    <span class="font-medium">Lama:</span> {{ formatValues(entry.old_values) }}
+                  </div>
+                  <div v-if="entry.new_values" class="text-green-600">
+                    <span class="font-medium">Baru:</span> {{ formatValues(entry.new_values) }}
+                  </div>
+                </div>
+                
+                <p v-if="entry.txId" class="text-xs text-gray-400 font-mono mt-1 break-all bg-gray-50 p-1 rounded">
+                  TX: {{ entry.txId }}
+                </p>
+                
+                <p v-if="entry.kegiatan_id" class="text-xs text-gray-500 mt-1">
+                  🔗 Kegiatan ID: {{ entry.kegiatan_id }}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -153,11 +229,34 @@ const store = useUsulanStore()
 
 const usulan = computed(() => store.currentUsulan)
 const auditTrail = ref([])
+const sortOrder = ref('asc') // 'asc' = oldest first, 'desc' = newest first
 const showTolakModal = ref(false)
 const catatanPenolakan = ref('')
 const skFile = ref(null)
 const skNumber = ref('')
 const skDate = ref('')
+
+// Computed property for sorted audit trail
+const sortedAuditTrail = computed(() => {
+  if (!auditTrail.value || auditTrail.value.length === 0) return []
+  
+  const sorted = [...auditTrail.value].sort((a, b) => {
+    const dateA = new Date(a.timestamp || a.created_at || 0)
+    const dateB = new Date(b.timestamp || b.created_at || 0)
+    
+    if (sortOrder.value === 'asc') {
+      return dateA - dateB // Oldest first
+    } else {
+      return dateB - dateA // Newest first
+    }
+  })
+  
+  return sorted
+})
+
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -166,15 +265,39 @@ function formatDate(dateStr) {
   })
 }
 
+function formatValues(values) {
+  if (!values) return ''
+  if (typeof values === 'string') return values
+  if (typeof values === 'object') {
+    return Object.entries(values)
+      .map(([key, val]) => `${key}: ${val}`)
+      .join(', ')
+  }
+  return String(values)
+}
+
+async function fetchAuditTrail() {
+  try {
+    const { data } = await usulanApi.getAuditTrail(route.params.id)
+    auditTrail.value = data.data || []
+    console.log('Audit trail loaded:', auditTrail.value)
+  } catch (error) {
+    console.error('Failed to load audit trail:', error)
+    auditTrail.value = []
+  }
+}
+
 async function handleProses() {
   await store.proses(route.params.id)
   await store.fetchById(route.params.id)
+  await fetchAuditTrail()
 }
 
 async function handleTolak() {
   await store.tolak(route.params.id, catatanPenolakan.value)
   showTolakModal.value = false
   await store.fetchById(route.params.id)
+  await fetchAuditTrail()
 }
 
 async function handleTerbitkanSk() {
@@ -186,15 +309,11 @@ async function handleTerbitkanSk() {
   }
   await store.terbitkanSk(route.params.id, formData)
   await store.fetchById(route.params.id)
+  await fetchAuditTrail()
 }
 
 onMounted(async () => {
   await store.fetchById(route.params.id)
-  try {
-    const { data } = await usulanApi.getAuditTrail(route.params.id)
-    auditTrail.value = data.data || data.history || []
-  } catch {
-    // audit trail may not be available
-  }
+  await fetchAuditTrail()
 })
 </script>

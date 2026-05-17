@@ -11,7 +11,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { pool } = require('../../config/database');
 const { auth, checkRole } = require('../../middleware/auth');
-const { generateFileHash } = require('../../utils/hashUtils');
+const { hashFile: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
 const Usulan = require('../../models/Usulan');
 
@@ -360,7 +360,7 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
 
 /**
  * GET /api/v1/usulan/:id/audit
- * Get audit trail from blockchain
+ * Get complete audit trail: kegiatan + usulan + blockchain
  */
 router.get('/:id/audit', async (req, res) => {
   try {
@@ -374,22 +374,102 @@ router.get('/:id/audit', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Get blockchain history
+    // 1. Get all verified kegiatan for this dosen (used in this usulan)
+    const kegiatanAudit = await pool.query(
+      `SELECT 
+        al.action,
+        al.old_values,
+        al.new_values,
+        al.user_id,
+        al.created_at as timestamp,
+        al.description,
+        al.record_id as kegiatan_id,
+        'kegiatan' as source,
+        u.nama_lengkap as user_name
+       FROM sk.audit_logs al
+       LEFT JOIN sk.users u ON al.user_id = u.id
+       WHERE al.table_name = 'kegiatan_dosen'
+         AND al.record_id IN (
+           SELECT id::text FROM sk.kegiatan_dosen 
+           WHERE dosen_id = $1 AND status = 'verified' AND deleted_at IS NULL
+         )
+       ORDER BY al.created_at ASC`,
+      [usulan.dosen_id]
+    );
+
+    // 2. Get blockchain history for usulan
     const blockchainHistory = await fabricClient.getUsulanHistory(req.params.id);
 
-    // Get DB audit logs as fallback/complement
-    const dbAudit = await pool.query(
-      `SELECT * FROM sk.audit_logs
-       WHERE table_name = 'usulan_kenaikan_pangkat' AND record_id = $1
-       ORDER BY created_at ASC`,
+    // 3. Get DB audit logs for usulan
+    const usulanAudit = await pool.query(
+      `SELECT 
+        al.action,
+        al.old_values,
+        al.new_values,
+        al.user_id,
+        al.created_at as timestamp,
+        al.description,
+        'usulan' as source,
+        u.nama_lengkap as user_name
+       FROM sk.audit_logs al
+       LEFT JOIN sk.users u ON al.user_id = u.id
+       WHERE al.table_name = 'usulan_kenaikan_pangkat' AND al.record_id = $1
+       ORDER BY al.created_at ASC`,
       [req.params.id]
     );
 
+    // 4. Format kegiatan entries
+    const kegiatanEntries = kegiatanAudit.rows.map(entry => ({
+      action: entry.action,
+      timestamp: entry.timestamp,
+      old_values: entry.old_values,
+      new_values: entry.new_values,
+      user_id: entry.user_id,
+      user_name: entry.user_name,
+      description: entry.description,
+      kegiatan_id: entry.kegiatan_id,
+      source: 'kegiatan',
+      category: 'Kegiatan'
+    }));
+
+    // 5. Format blockchain entries
+    const blockchainEntries = (blockchainHistory || []).map(entry => ({
+      action: entry.action || entry.status || 'Blockchain Event',
+      timestamp: entry.timestamp,
+      txId: entry.txId,
+      source: 'blockchain',
+      category: 'Usulan',
+      ...entry
+    }));
+
+    // 6. Format usulan entries
+    const usulanEntries = usulanAudit.rows.map(entry => ({
+      action: entry.action,
+      timestamp: entry.timestamp,
+      old_values: entry.old_values,
+      new_values: entry.new_values,
+      user_id: entry.user_id,
+      user_name: entry.user_name,
+      description: entry.description,
+      source: 'database',
+      category: 'Usulan'
+    }));
+
+    // 7. Merge all entries and sort by timestamp
+    const allEntries = [...kegiatanEntries, ...blockchainEntries, ...usulanEntries].sort((a, b) => {
+      const dateA = new Date(a.timestamp || 0);
+      const dateB = new Date(b.timestamp || 0);
+      return dateA - dateB;
+    });
+
     res.json({
-      data: {
-        blockchain: blockchainHistory || [],
-        database: dbAudit.rows,
-      },
+      data: allEntries,
+      summary: {
+        total: allEntries.length,
+        kegiatan: kegiatanEntries.length,
+        usulan: usulanEntries.length,
+        blockchain: blockchainEntries.length,
+      }
     });
   } catch (error) {
     console.error('Error getting audit trail:', error);
