@@ -447,14 +447,17 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     // Submit to blockchain (non-blocking, fallback if unavailable)
     if (fabricClient.isFabricEnabled()) {
       try {
-        await fabricClient.recordKegiatanCreation(
+        const txId = await fabricClient.recordKegiatanCreation(
           kegiatan.id, userId, file_hash, ref_kegiatan_id, poin_kum
         );
         // Update tx_id if successful
-        const txResult = await pool.query(
-          'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
-          [`fabric-${Date.now()}`, kegiatan.id]
-        );
+        if (txId) {
+          await pool.query(
+            'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
+            [txId, kegiatan.id]
+          );
+          kegiatan.tx_id_fabric = txId;
+        }
       } catch (fabricErr) {
         console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
       }
@@ -577,7 +580,14 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     // Record verification on blockchain
     if (fabricClient.isFabricEnabled()) {
       try {
-        await fabricClient.recordKegiatanVerification(id, status, userId);
+        const txId = await fabricClient.recordKegiatanVerification(id, status, userId);
+        if (txId) {
+          await pool.query(
+            'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
+            [txId, id]
+          );
+          result.rows[0].tx_id_fabric = txId;
+        }
       } catch (fabricErr) {
         console.warn('⚠️  Blockchain verification recording failed:', fabricErr.message);
       }

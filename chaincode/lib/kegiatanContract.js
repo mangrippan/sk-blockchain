@@ -249,11 +249,10 @@ class KegiatanContract extends Contract {
       throw new Error(`Usulan ${usulanId} already exists`);
     }
 
-    // Validate minimum KUM
+    // Note: KUM validation is handled by the application layer (database).
+    // Blockchain records the event as-is for audit trail purposes.
     const minKUM = this._getMinKUM(jabatanTujuan);
-    if (parseFloat(totalKUM) < minKUM) {
-      throw new Error(`KUM tidak mencukupi. Minimal ${minKUM} untuk ${jabatanTujuan}, dimiliki: ${totalKUM}`);
-    }
+    const kumMeetRequirement = parseFloat(totalKUM) >= minKUM;
 
     // Versioning: if resubmitting after rejection
     if (idUsulanLama && idUsulanLama !== 'null') {
@@ -273,6 +272,7 @@ class KegiatanContract extends Contract {
       hashNIP: hashNIP,
       totalKUM: parseFloat(totalKUM),
       jabatanTujuan: jabatanTujuan,
+      kumMeetRequirement: kumMeetRequirement,
       status: 'pending',
       idUsulanLama: idUsulanLama !== 'null' ? idUsulanLama : null,
       skHash: null,
