@@ -1,0 +1,126 @@
+# ============================================
+# ChainRank Full Stack Docker Compose
+# ============================================
+# This docker-compose file orchestrates:
+# - PostgreSQL database
+# - Backend API
+# - Frontend web app
+#
+# Usage:
+#   docker-compose up -d        # Start all services
+#   docker-compose down         # Stop all services
+#   docker-compose logs -f      # View logs
+
+version: "3.8"
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: chainrank_postgres
+    environment:
+      POSTGRES_DB: chainrank_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5433:5432" # External:Internal (5433 to avoid conflict with local PostgreSQL)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema-hybrid.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    networks:
+      - chainrank_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chainrank_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
+  # Backend API
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chainrank_backend
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: chainrank_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres123
+      DB_SCHEMA: sk
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-32a7ff6dcbc28ec13c41549b4c1fdfd57ce7158e42aa3e7e86771390737328cc}
+      JWT_EXPIRES_IN: 24h
+      # Server
+      PORT: 3000
+      NODE_ENV: production
+      # CORS
+      CORS_ORIGIN: http://localhost:8080
+      # Fabric (disabled in Docker for simplicity)
+      FABRIC_ENABLED: false
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    networks:
+      - chainrank_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/api/v1/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # ============================================
+  # Frontend Web App
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:3000/api/v1
+    container_name: chainrank_frontend
+    ports:
+      - "8080:80" # Nginx will serve on port 80 internally
+    networks:
+      - chainrank_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  chainrank_network:
+    driver: bridge
+    name: chainrank_network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+    name: chainrank_postgres_data

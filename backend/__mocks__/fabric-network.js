@@ -4,9 +4,15 @@
  * we mock it for testing purposes.
  */
 
+const mockTransaction = {
+  getTransactionId: jest.fn().mockReturnValue('mock-tx-id-' + Date.now()),
+  submit: jest.fn().mockResolvedValue(Buffer.from('{}')),
+};
+
 const mockContract = {
   submitTransaction: jest.fn().mockResolvedValue(Buffer.from('{}')),
   evaluateTransaction: jest.fn().mockResolvedValue(Buffer.from('[]')),
+  createTransaction: jest.fn().mockReturnValue(mockTransaction),
 };
 
 const mockNetwork = {
