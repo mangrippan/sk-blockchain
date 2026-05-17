@@ -361,6 +361,7 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
 /**
  * GET /api/v1/usulan/:id/audit
  * Get complete audit trail: kegiatan + usulan + blockchain
+ * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
  */
 router.get('/:id/audit', async (req, res) => {
   try {
@@ -369,7 +370,7 @@ router.get('/:id/audit', async (req, res) => {
       return res.status(404).json({ error: 'Usulan not found' });
     }
 
-    // Dosen can only see their own
+    // Dosen can only see their own (Auditor can see all)
     if (req.user.role === 'dosen' && usulan.dosen_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }

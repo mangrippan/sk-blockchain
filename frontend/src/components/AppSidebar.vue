@@ -49,7 +49,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { LayoutDashboard, FileText, CheckSquare, User, Award } from 'lucide-vue-next'
+import { LayoutDashboard, FileText, CheckSquare, User, Award, History } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 
 defineProps({
@@ -65,17 +65,24 @@ const menuItems = computed(() => {
     { name: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/' },
   ]
   
+  // Menu untuk auditor: Audit Trail + Usulan (read-only)
+  if (auth.isAuditor) {
+    items.push({ name: 'audit-trail', label: 'Audit Trail', icon: History, to: '/audit-trail' })
+    items.push({ name: 'usulan', label: 'Semua Usulan', icon: Award, to: '/usulan' })
+  }
+  
   // Menu untuk dosen: Kegiatan Saya + Usulan
-  if (!auth.canVerify) {
+  if (!auth.canVerify && !auth.isAuditor) {
     items.push({ name: 'kegiatan', label: 'Kegiatan Saya', icon: FileText, to: '/kegiatan' })
     items.push({ name: 'usulan', label: 'Usulan Pangkat', icon: Award, to: '/usulan' })
   }
   
-  // Menu untuk admin/pimpinan/superadmin: Verifikasi + Semua Kegiatan + Usulan
+  // Menu untuk admin/pimpinan/superadmin: Verifikasi + Semua Kegiatan + Usulan + Audit Trail
   if (auth.canVerify) {
     items.push({ name: 'verifikasi', label: 'Verifikasi', icon: CheckSquare, to: '/verifikasi' })
     items.push({ name: 'kegiatan', label: 'Semua Kegiatan', icon: FileText, to: '/kegiatan' })
     items.push({ name: 'usulan', label: 'Usulan Pangkat', icon: Award, to: '/usulan' })
+    items.push({ name: 'audit-trail', label: 'Audit Trail', icon: History, to: '/audit-trail' })
   }
   
   items.push({ name: 'profil', label: 'Profil', icon: User, to: '/profil' })

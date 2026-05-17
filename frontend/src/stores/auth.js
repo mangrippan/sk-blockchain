@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'admin_sdm')
   const isPimpinan = computed(() => user.value?.role === 'pimpinan')
   const isSuperadmin = computed(() => user.value?.role === 'superadmin')
+  const isAuditor = computed(() => user.value?.role === 'auditor')
   const canVerify = computed(() => isAdmin.value || isPimpinan.value || isSuperadmin.value)
 
   async function login(email, password) {
@@ -63,6 +64,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     isPimpinan,
     isSuperadmin,
+    isAuditor,
     canVerify,
     login,
     logout,

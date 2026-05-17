@@ -55,6 +55,12 @@ const routes = [
         meta: { roles: ['admin_sdm', 'pimpinan', 'superadmin'] },
       },
       {
+        path: 'audit-trail',
+        name: 'audit-trail',
+        component: () => import('@/views/AuditTrailView.vue'),
+        meta: { roles: ['auditor', 'admin_sdm', 'pimpinan', 'superadmin'] },
+      },
+      {
         path: 'profil',
         name: 'profil',
         component: () => import('@/views/profil/ProfilView.vue'),
