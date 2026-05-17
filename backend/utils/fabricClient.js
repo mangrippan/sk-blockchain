@@ -60,7 +60,7 @@ async function connectGateway() {
     await gateway.connect(ccp, {
       wallet,
       identity: 'appUser',
-      discovery: { enabled: false }, // Disable discovery for now
+      discovery: { enabled: true, asLocalhost: true },
     });
 
     const network = await gateway.getNetwork(CHANNEL_NAME);
@@ -90,7 +90,7 @@ async function disconnectGateway() {
 
 /**
  * Submit a transaction to the blockchain (write operation)
- * Returns null if Fabric is not available (fallback mode)
+ * Returns { txId, result } if Fabric is available, null otherwise
  */
 async function submitTransaction(functionName, ...args) {
   if (!FABRIC_ENABLED || !contract) {
@@ -98,8 +98,10 @@ async function submitTransaction(functionName, ...args) {
   }
 
   try {
-    const result = await contract.submitTransaction(functionName, ...args);
-    return result.toString();
+    const transaction = contract.createTransaction(functionName);
+    const txId = transaction.getTransactionId();
+    const result = await transaction.submit(...args);
+    return { txId, result: result.toString() };
   } catch (error) {
     console.error(`❌ Fabric submitTransaction(${functionName}) failed:`, error.message);
     return null;
@@ -143,12 +145,12 @@ async function recordKegiatanCreation(kegiatanId, dosenId, fileHash, refKegiatan
     String(poinKum),
     timestamp
   );
-  return result;
+  return result ? result.txId : null;
 }
 
 /**
  * Record a verification action on the blockchain
- * @returns {string|null} Result or null if Fabric unavailable
+ * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
 async function recordKegiatanVerification(kegiatanId, newStatus, verifiedBy) {
   const timestamp = new Date().toISOString();
@@ -159,7 +161,7 @@ async function recordKegiatanVerification(kegiatanId, newStatus, verifiedBy) {
     String(verifiedBy),
     timestamp
   );
-  return result;
+  return result ? result.txId : null;
 }
 
 /**
@@ -192,10 +194,11 @@ async function verifyDocumentHash(kegiatanId, documentHash) {
 
 /**
  * Record usulan creation on blockchain
+ * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
 async function recordUsulanCreation(usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama) {
   const timestamp = new Date().toISOString();
-  return await submitTransaction(
+  const result = await submitTransaction(
     'AjukanUsulanKenaikanPangkat',
     String(usulanId),
     hashNIP,
@@ -204,47 +207,54 @@ async function recordUsulanCreation(usulanId, hashNIP, totalKUM, jabatanTujuan, 
     idUsulanLama ? String(idUsulanLama) : 'null',
     timestamp
   );
+  return result ? result.txId : null;
 }
 
 /**
  * Record usulan processing on blockchain
+ * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
 async function recordUsulanProcess(usulanId, processedBy) {
   const timestamp = new Date().toISOString();
-  return await submitTransaction(
+  const result = await submitTransaction(
     'ProsesUsulanKenaikanPangkat',
     String(usulanId),
     String(processedBy),
     timestamp
   );
+  return result ? result.txId : null;
 }
 
 /**
  * Record usulan rejection on blockchain
+ * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
 async function recordUsulanRejection(usulanId, processedBy, catatan) {
   const timestamp = new Date().toISOString();
-  return await submitTransaction(
+  const result = await submitTransaction(
     'TolakUsulanKenaikanPangkat',
     String(usulanId),
     String(processedBy),
     catatan,
     timestamp
   );
+  return result ? result.txId : null;
 }
 
 /**
  * Record SK issuance on blockchain
+ * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
 async function recordUsulanSKIssued(usulanId, skHash, processedBy) {
   const timestamp = new Date().toISOString();
-  return await submitTransaction(
+  const result = await submitTransaction(
     'TerbitkanSkKenaikanPangkat',
     String(usulanId),
     skHash,
     String(processedBy),
     timestamp
   );
+  return result ? result.txId : null;
 }
 
 /**
