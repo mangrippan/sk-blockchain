@@ -273,6 +273,17 @@ function toggleSortOrder() {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
+  
+  // Handle Protobuf Timestamp format from blockchain (Fabric)
+  if (typeof dateStr === 'object' && dateStr.seconds !== undefined) {
+    // Convert protobuf timestamp: seconds since epoch + nanoseconds
+    const milliseconds = dateStr.seconds * 1000 + (dateStr.nanos || 0) / 1000000
+    return new Date(milliseconds).toLocaleDateString('id-ID', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+  }
+  
+  // Handle regular ISO date string
   return new Date(dateStr).toLocaleDateString('id-ID', {
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
   })

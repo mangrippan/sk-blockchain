@@ -160,6 +160,19 @@ async function searchAuditTrail() {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
+  
+  // Handle Protobuf Timestamp format from blockchain (Fabric)
+  if (typeof dateStr === 'object' && dateStr.seconds !== undefined) {
+    const milliseconds = dateStr.seconds * 1000 + (dateStr.nanos || 0) / 1000000
+    return new Date(milliseconds).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+  
   return new Date(dateStr).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',

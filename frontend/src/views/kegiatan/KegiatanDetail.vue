@@ -214,6 +214,17 @@ async function fetchAuditTrail() {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
+  
+  // Handle Protobuf Timestamp format from blockchain (Fabric)
+  if (typeof dateStr === 'object' && dateStr.seconds !== undefined) {
+    const milliseconds = dateStr.seconds * 1000 + (dateStr.nanos || 0) / 1000000
+    return new Date(milliseconds).toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  }
+  
   return new Date(dateStr).toLocaleDateString('id-ID', {
     year: 'numeric',
     month: 'long',
@@ -255,6 +266,19 @@ function downloadFile() {
 
 function formatDateTime(dateStr) {
   if (!dateStr) return '-'
+  
+  // Handle Protobuf Timestamp format from blockchain (Fabric)
+  if (typeof dateStr === 'object' && dateStr.seconds !== undefined) {
+    const milliseconds = dateStr.seconds * 1000 + (dateStr.nanos || 0) / 1000000
+    return new Date(milliseconds).toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+  
   return new Date(dateStr).toLocaleDateString('id-ID', {
     year: 'numeric',
     month: 'short',
