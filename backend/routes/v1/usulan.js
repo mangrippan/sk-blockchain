@@ -155,23 +155,70 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     await client.query('BEGIN');
     
     const {
-      jabatan_asal,
-      jabatan_tujuan,
+      jabatan_tujuan_id,
       periode_penilaian_mulai,
       periode_penilaian_selesai,
       referensi_id,
     } = req.body;
 
-    if (!jabatan_tujuan) {
-      return res.status(400).json({ error: 'jabatan_tujuan is required' });
+    if (!jabatan_tujuan_id) {
+      return res.status(400).json({ error: 'jabatan_tujuan_id is required' });
     }
 
-    // Get all verified kegiatan for this dosen with full details
+    // Get user's current jabatan
+    const userResult = await client.query(
+      `SELECT u.jabatan_id, j.nama as jabatan_nama, j.tingkat
+       FROM sk.users u
+       LEFT JOIN sk.ref_jabatan_akademik j ON u.jabatan_id = j.id
+       WHERE u.id = $1`,
+      [req.user.id]
+    );
+
+    const currentJabatan = userResult.rows[0];
+    
+    if (!currentJabatan.jabatan_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'No current jabatan assigned',
+        message: 'Please contact admin to set your jabatan before submitting usulan'
+      });
+    }
+
+    // Validate jabatan using database function
+    const validationResult = await client.query(
+      'SELECT * FROM sk.validate_usulan_jabatan($1, $2)',
+      [req.user.id, jabatan_tujuan_id]
+    );
+
+    const validation = validationResult.rows[0];
+    
+    if (!validation.is_valid) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Invalid jabatan target',
+        message: validation.message,
+        current_jabatan: validation.current_jabatan,
+        target_jabatan: validation.target_jabatan,
+        expected_jabatan: validation.expected_jabatan
+      });
+    }
+
+    // Get target jabatan details (for min_kum)
+    const jabatanResult = await client.query(
+      'SELECT * FROM sk.ref_jabatan_akademik WHERE id = $1',
+      [jabatan_tujuan_id]
+    );
+    const targetJabatan = jabatanResult.rows[0];
+
+    // Get all verified kegiatan that haven't been used (KUM reset logic)
     const kegiatanResult = await client.query(
       `SELECT k.id, k.poin_kum, k.file_hash, k.ref_kegiatan_id,
               k.tx_id_fabric, k.tx_id_verify_fabric, k.verified_at
        FROM sk.kegiatan_dosen k
-       WHERE k.dosen_id = $1 AND k.status = 'verified' AND k.deleted_at IS NULL
+       WHERE k.dosen_id = $1 
+         AND k.status = 'verified' 
+         AND k.deleted_at IS NULL
+         AND k.used_in_usulan_id IS NULL
        ORDER BY k.id`,
       [req.user.id]
     );
@@ -182,8 +229,19 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     if (kegiatanList.length === 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ 
-        error: 'No verified kegiatan found',
-        message: 'You must have at least one verified kegiatan to submit usulan'
+        error: 'No available kegiatan found',
+        message: 'You must have verified kegiatan that have not been used in a previous usulan'
+      });
+    }
+
+    // Check if KUM meets minimum requirement
+    if (totalPoin < parseFloat(targetJabatan.min_kum)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Insufficient KUM',
+        message: `You have ${totalPoin} KUM, but ${targetJabatan.nama} requires minimum ${targetJabatan.min_kum} KUM`,
+        current_kum: totalPoin,
+        required_kum: parseFloat(targetJabatan.min_kum)
       });
     }
 
@@ -191,8 +249,10 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     const usulan = await Usulan.create({
       dosen_id: req.user.id,
       total_poin_diajukan: totalPoin,
-      jabatan_asal,
-      jabatan_tujuan,
+      jabatan_asal: currentJabatan.jabatan_nama,
+      jabatan_tujuan: targetJabatan.nama,
+      jabatan_asal_id: currentJabatan.jabatan_id,
+      jabatan_tujuan_id: jabatan_tujuan_id,
       periode_penilaian_mulai,
       periode_penilaian_selesai,
     });
@@ -250,7 +310,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       usulan.id,
       hashNIP,
       totalPoin,
-      jabatan_tujuan,
+      targetJabatan.nama,
       referensi_id || null,
       snapshotHash
     );
@@ -367,12 +427,37 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
 /**
  * PUT /api/v1/usulan/:id/terbitkan-sk
  * Admin: Issue SK (diproses → sk_issued) with SK document upload
+ * Also updates user's jabatan and locks kegiatan used in the usulan
  */
 router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), upload.single('sk_document'), async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    
     const { sk_number, sk_date } = req.body;
     if (!sk_number || !sk_date) {
       return res.status(400).json({ error: 'sk_number and sk_date are required' });
+    }
+
+    // Get usulan details including jabatan_tujuan_id and dosen_id
+    const usulanResult = await client.query(
+      `SELECT u.*, j.nama as jabatan_tujuan_nama
+       FROM sk.usulan_kenaikan_pangkat u
+       LEFT JOIN sk.ref_jabatan_akademik j ON u.jabatan_tujuan_id = j.id
+       WHERE u.id = $1`,
+      [req.params.id]
+    );
+
+    if (usulanResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usulan not found' });
+    }
+
+    const usulan = usulanResult.rows[0];
+
+    if (usulan.status !== 'diproses') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Cannot issue SK. Usulan must be in "diproses" status.' });
     }
 
     let sk_document_url = null;
@@ -384,6 +469,7 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       sk_document_hash = await generateFileHash(req.file.path);
     }
 
+    // Issue SK
     const result = await Usulan.issueSK(req.params.id, {
       sk_document_url,
       sk_document_hash,
@@ -393,8 +479,34 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     });
 
     if (!result) {
-      return res.status(400).json({ error: 'Cannot issue SK. Usulan must be in "diproses" status.' });
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Failed to issue SK' });
     }
+
+    // Update user's jabatan to jabatan_tujuan
+    if (usulan.jabatan_tujuan_id) {
+      await client.query(
+        `UPDATE sk.users 
+         SET jabatan_id = $1, 
+             jabatan_saat_ini = $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [usulan.jabatan_tujuan_id, usulan.jabatan_tujuan_nama, usulan.dosen_id]
+      );
+    }
+
+    // Lock all kegiatan used in this usulan (KUM reset)
+    await client.query(
+      `UPDATE sk.kegiatan_dosen 
+       SET used_in_usulan_id = $1, updated_at = NOW()
+       WHERE id IN (
+         SELECT kegiatan_id 
+         FROM sk.usulan_kegiatan_snapshot 
+         WHERE usulan_id = $1
+       )
+       AND used_in_usulan_id IS NULL`,
+      [req.params.id]
+    );
 
     // Record to blockchain with SK hash
     const txResult = await fabricClient.recordUsulanSKIssued(
@@ -407,19 +519,34 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     }
 
     // Audit log
-    await pool.query(
+    await client.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'ISSUE_SK', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'sk_issued', sk_number, sk_document_hash,
+        status: 'sk_issued', 
+        sk_number, 
+        sk_document_hash,
+        jabatan_updated: usulan.jabatan_tujuan_nama,
+        kegiatan_locked: true,
         blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
 
-    res.json({ message: 'SK berhasil diterbitkan', data: result });
+    await client.query('COMMIT');
+
+    res.json({ 
+      message: 'SK berhasil diterbitkan. Jabatan dosen telah diperbarui dan kegiatan telah dikunci.', 
+      data: {
+        ...result,
+        jabatan_baru: usulan.jabatan_tujuan_nama,
+      }
+    });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error issuing SK:', error);
     res.status(500).json({ error: 'Failed to issue SK', message: error.message });
+  } finally {
+    client.release();
   }
 });
 

@@ -16,4 +16,12 @@ export const refApi = {
   getDokumen(activeOnly = true) {
     return api.get('/ref/dokumen', { params: { active_only: activeOnly } })
   },
+
+  getJabatan(activeOnly = true) {
+    return api.get('/ref/jabatan', { params: { active_only: activeOnly } })
+  },
+
+  getNextJabatan(userId) {
+    return api.get(`/ref/jabatan/next/${userId}`)
+  },
 }
