@@ -150,7 +150,10 @@ router.get('/:id', async (req, res) => {
  * Ajukan usulan kenaikan pangkat
  */
 router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    
     const {
       jabatan_asal,
       jabatan_tujuan,
@@ -163,14 +166,26 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       return res.status(400).json({ error: 'jabatan_tujuan is required' });
     }
 
-    // Calculate total verified KUM for this dosen
-    const kumResult = await pool.query(
-      `SELECT COALESCE(SUM(poin_kum), 0) as total_poin
-       FROM sk.kegiatan_dosen
-       WHERE dosen_id = $1 AND status = 'verified' AND deleted_at IS NULL`,
+    // Get all verified kegiatan for this dosen with full details
+    const kegiatanResult = await client.query(
+      `SELECT k.id, k.poin_kum, k.file_hash, k.ref_kegiatan_id,
+              k.tx_id_fabric, k.tx_id_verify_fabric, k.verified_at
+       FROM sk.kegiatan_dosen k
+       WHERE k.dosen_id = $1 AND k.status = 'verified' AND k.deleted_at IS NULL
+       ORDER BY k.id`,
       [req.user.id]
     );
-    const totalPoin = parseFloat(kumResult.rows[0].total_poin);
+    
+    const kegiatanList = kegiatanResult.rows;
+    const totalPoin = kegiatanList.reduce((sum, k) => sum + parseFloat(k.poin_kum), 0);
+
+    if (kegiatanList.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'No verified kegiatan found',
+        message: 'You must have at least one verified kegiatan to submit usulan'
+      });
+    }
 
     // Create usulan
     const usulan = await Usulan.create({
@@ -184,23 +199,60 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
 
     // If referensi_id provided (resubmission), link it
     if (referensi_id) {
-      await pool.query(
+      await client.query(
         `UPDATE sk.usulan_kenaikan_pangkat SET referensi_id = $1 WHERE id = $2`,
         [referensi_id, usulan.id]
       );
     }
 
+    // Create snapshot for each kegiatan
+    for (const kegiatan of kegiatanList) {
+      await client.query(
+        `INSERT INTO sk.usulan_kegiatan_snapshot (
+          usulan_id, kegiatan_id, poin_kum, file_hash, ref_kegiatan_id,
+          tx_id_fabric, tx_id_verify_fabric, status_saat_snapshot, verified_at_snapshot
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          usulan.id,
+          kegiatan.id,
+          kegiatan.poin_kum,
+          kegiatan.file_hash,
+          kegiatan.ref_kegiatan_id,
+          kegiatan.tx_id_fabric,
+          kegiatan.tx_id_verify_fabric,
+          'verified',
+          kegiatan.verified_at,
+        ]
+      );
+    }
+
+    // Calculate snapshot hash (sorted by kegiatan_id for consistency)
+    const snapshotData = kegiatanList.map(k => ({
+      id: k.id,
+      poin: k.poin_kum,
+      hash: k.file_hash,
+    }));
+    const snapshotString = JSON.stringify(snapshotData);
+    const snapshotHash = crypto.createHash('sha256').update(snapshotString).digest('hex');
+
+    // Update usulan with snapshot hash
+    await client.query(
+      `UPDATE sk.usulan_kenaikan_pangkat SET snapshot_hash = $1 WHERE id = $2`,
+      [snapshotHash, usulan.id]
+    );
+
     // Submit (draft → pending)
     const submitted = await Usulan.submit(usulan.id);
 
-    // Record to blockchain
+    // Record to blockchain with snapshot hash
     const hashNIP = crypto.createHash('sha256').update(req.user.nip_nidn || '').digest('hex');
     const txResult = await fabricClient.recordUsulanCreation(
       usulan.id,
       hashNIP,
       totalPoin,
       jabatan_tujuan,
-      referensi_id || null
+      referensi_id || null,
+      snapshotHash
     );
 
     if (txResult) {
@@ -208,21 +260,34 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     }
 
     // Audit log
-    await pool.query(
+    await client.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'CREATE', 'usulan_kenaikan_pangkat', usulan.id, JSON.stringify({
-        jabatan_tujuan, total_poin: totalPoin, blockchain_tx: txResult ? 'success' : 'skipped',
+        jabatan_tujuan, 
+        total_poin: totalPoin, 
+        kegiatan_count: kegiatanList.length,
+        snapshot_hash: snapshotHash,
+        blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
 
+    await client.query('COMMIT');
+
     res.status(201).json({
       message: 'Usulan berhasil diajukan',
-      data: submitted || usulan,
+      data: {
+        ...submitted || usulan,
+        snapshot_hash: snapshotHash,
+        kegiatan_count: kegiatanList.length,
+      },
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error creating usulan:', error);
     res.status(500).json({ error: 'Failed to create usulan', message: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -355,6 +420,68 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
   } catch (error) {
     console.error('Error issuing SK:', error);
     res.status(500).json({ error: 'Failed to issue SK', message: error.message });
+  }
+});
+
+/**
+ * GET /api/v1/usulan/:id/snapshot
+ * Get kegiatan snapshot for this usulan
+ * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
+ */
+router.get('/:id/snapshot', async (req, res) => {
+  try {
+    const usulan = await Usulan.findById(req.params.id);
+    if (!usulan) {
+      return res.status(404).json({ error: 'Usulan not found' });
+    }
+
+    // Dosen can only see their own
+    if (req.user.role === 'dosen' && usulan.dosen_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get snapshot kegiatan
+    const snapshotResult = await pool.query(
+      `SELECT 
+        s.id as snapshot_id,
+        s.kegiatan_id,
+        s.poin_kum,
+        s.file_hash,
+        s.tx_id_fabric as kegiatan_create_tx,
+        s.tx_id_verify_fabric as kegiatan_verify_tx,
+        s.status_saat_snapshot,
+        s.verified_at_snapshot,
+        s.created_at as snapshot_created_at,
+        k.file_name,
+        k.deskripsi,
+        k.status as current_status,
+        ref.kode_kegiatan,
+        ref.nama_kegiatan,
+        kat.nama_kategori
+       FROM sk.usulan_kegiatan_snapshot s
+       JOIN sk.kegiatan_dosen k ON s.kegiatan_id = k.id
+       JOIN sk.ref_kegiatan_kum ref ON s.ref_kegiatan_id = ref.id
+       JOIN sk.ref_kategori_kum kat ON ref.kategori_id = kat.id
+       WHERE s.usulan_id = $1
+       ORDER BY s.created_at, k.created_at`,
+      [req.params.id]
+    );
+
+    const snapshot = snapshotResult.rows;
+    const totalPoin = snapshot.reduce((sum, k) => sum + parseFloat(k.poin_kum), 0);
+
+    res.json({
+      data: {
+        usulan_id: req.params.id,
+        snapshot_hash: usulan.snapshot_hash,
+        total_poin: totalPoin,
+        kegiatan_count: snapshot.length,
+        kegiatan: snapshot,
+      },
+    });
+  } catch (error) {
+    console.error('Error getting usulan snapshot:', error);
+    res.status(500).json({ error: 'Failed to get usulan snapshot', message: error.message });
   }
 });
 

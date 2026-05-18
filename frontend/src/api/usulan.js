@@ -36,4 +36,8 @@ export const usulanApi = {
   getAuditTrail(id) {
     return api.get(`/usulan/${id}/audit`)
   },
+
+  getSnapshot(id) {
+    return api.get(`/usulan/${id}/snapshot`)
+  },
 }

@@ -238,9 +238,10 @@ class KegiatanContract extends Contract {
    * @param {string} totalKUM - Total accumulated KUM points
    * @param {string} jabatanTujuan - Target position
    * @param {string} idUsulanLama - Previous rejected usulan ID (null if first time)
+   * @param {string} snapshotHash - SHA-256 hash of kegiatan snapshot (for integrity)
    * @param {string} timestamp - ISO timestamp
    */
-  async AjukanUsulanKenaikanPangkat(ctx, usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama, timestamp) {
+  async AjukanUsulanKenaikanPangkat(ctx, usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama, snapshotHash, timestamp) {
     const key = 'USULAN_' + usulanId;
 
     // Check if already exists
@@ -275,6 +276,7 @@ class KegiatanContract extends Contract {
       kumMeetRequirement: kumMeetRequirement,
       status: 'pending',
       idUsulanLama: idUsulanLama !== 'null' ? idUsulanLama : null,
+      snapshotHash: snapshotHash || null,
       skHash: null,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -407,6 +409,38 @@ class KegiatanContract extends Contract {
   async GetHistoriUsulan(ctx, usulanId) {
     const key = 'USULAN_' + usulanId;
     return await this.GetHistory(ctx, key);
+  }
+
+  /**
+   * VerifyUsulanSnapshot - Verify the integrity of kegiatan snapshot against stored hash
+   * 
+   * @param {Context} ctx
+   * @param {string} usulanId - UUID of the usulan
+   * @param {string} calculatedHash - Hash calculated from current snapshot data
+   * @returns {object} Verification result with match status
+   */
+  async VerifyUsulanSnapshot(ctx, usulanId, calculatedHash) {
+    const key = 'USULAN_' + usulanId;
+    const data = await ctx.stub.getState(key);
+    
+    if (!data || data.length === 0) {
+      throw new Error(`Usulan ${usulanId} does not exist`);
+    }
+
+    const usulan = JSON.parse(data.toString());
+    const storedHash = usulan.snapshotHash;
+    const isValid = storedHash === calculatedHash;
+
+    return JSON.stringify({
+      usulanId: usulanId,
+      storedHash: storedHash,
+      calculatedHash: calculatedHash,
+      isValid: isValid,
+      message: isValid 
+        ? 'Snapshot integrity verified - no tampering detected' 
+        : 'WARNING: Snapshot hash mismatch - possible data tampering!',
+      verifiedAt: new Date().toISOString(),
+    });
   }
 }
 

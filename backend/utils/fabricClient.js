@@ -194,9 +194,15 @@ async function verifyDocumentHash(kegiatanId, documentHash) {
 
 /**
  * Record usulan creation on blockchain
+ * @param {string} usulanId - UUID of usulan
+ * @param {string} hashNIP - Hashed NIP
+ * @param {number} totalKUM - Total KUM points
+ * @param {string} jabatanTujuan - Target position
+ * @param {string|null} idUsulanLama - Previous usulan ID if resubmission
+ * @param {string} snapshotHash - SHA-256 hash of kegiatan snapshot
  * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
-async function recordUsulanCreation(usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama) {
+async function recordUsulanCreation(usulanId, hashNIP, totalKUM, jabatanTujuan, idUsulanLama, snapshotHash) {
   const timestamp = new Date().toISOString();
   const result = await submitTransaction(
     'AjukanUsulanKenaikanPangkat',
@@ -205,6 +211,7 @@ async function recordUsulanCreation(usulanId, hashNIP, totalKUM, jabatanTujuan, 
     String(totalKUM),
     jabatanTujuan,
     idUsulanLama ? String(idUsulanLama) : 'null',
+    snapshotHash || '',
     timestamp
   );
   return result ? result.txId : null;
@@ -268,6 +275,20 @@ async function getUsulanHistory(usulanId) {
   return null;
 }
 
+/**
+ * Verify usulan snapshot integrity against blockchain
+ * @param {string} usulanId - UUID of usulan
+ * @param {string} calculatedHash - Hash calculated from current snapshot
+ * @returns {object|null} Verification result or null if Fabric unavailable
+ */
+async function verifyUsulanSnapshot(usulanId, calculatedHash) {
+  const result = await evaluateTransaction('VerifyUsulanSnapshot', String(usulanId), calculatedHash);
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
 module.exports = {
   isFabricEnabled,
   connectGateway,
@@ -283,4 +304,5 @@ module.exports = {
   recordUsulanRejection,
   recordUsulanSKIssued,
   getUsulanHistory,
+  verifyUsulanSnapshot,
 };

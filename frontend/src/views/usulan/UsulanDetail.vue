@@ -29,11 +29,108 @@
           </div>
           <div>
             <p class="text-sm text-gray-500">Blockchain TX</p>
-            <p class="font-mono text-xs text-gray-600 break-all">{{ usulan.blockchain_tx || '-' }}</p>
+            <p class="font-mono text-xs text-gray-600 break-all">{{ usulan.tx_id_fabric || '-' }}</p>
           </div>
           <div v-if="usulan.catatan_penolakan" class="md:col-span-2">
             <p class="text-sm text-gray-500">Catatan Penolakan</p>
             <p class="text-red-600">{{ usulan.catatan_penolakan }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kegiatan yang Diajukan -->
+      <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">
+          Kegiatan yang Diajukan
+          <span v-if="snapshotData" class="text-sm font-normal text-gray-500">
+            ({{ snapshotData.kegiatan_count }} kegiatan)
+          </span>
+        </h2>
+        
+        <div v-if="loadingSnapshot" class="text-gray-500 text-sm">Memuat data kegiatan...</div>
+        
+        <div v-else-if="!snapshotData || snapshotData.kegiatan_count === 0" class="text-gray-500 text-sm">
+          Tidak ada kegiatan yang tercatat dalam usulan ini
+        </div>
+        
+        <div v-else>
+          <!-- Snapshot Hash Info -->
+          <div class="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div class="text-xs text-blue-800 space-y-1">
+              <div class="flex items-start gap-2">
+                <span class="font-semibold">Snapshot Hash:</span>
+                <code class="font-mono break-all">{{ snapshotData.snapshot_hash || '-' }}</code>
+              </div>
+              <div class="text-blue-600">
+                ℹ️ Hash ini memastikan daftar kegiatan tidak dapat diubah setelah usulan diajukan
+              </div>
+            </div>
+          </div>
+
+          <!-- Kegiatan Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b">
+                <tr>
+                  <th class="text-left p-2 font-semibold text-gray-700">Kegiatan</th>
+                  <th class="text-left p-2 font-semibold text-gray-700">Kategori</th>
+                  <th class="text-center p-2 font-semibold text-gray-700">Poin</th>
+                  <th class="text-left p-2 font-semibold text-gray-700">TX Create</th>
+                  <th class="text-left p-2 font-semibold text-gray-700">TX Verify</th>
+                  <th class="text-center p-2 font-semibold text-gray-700">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr 
+                  v-for="kegiatan in snapshotData.kegiatan" 
+                  :key="kegiatan.kegiatan_id"
+                  class="border-b hover:bg-gray-50"
+                >
+                  <td class="p-2">
+                    <div class="font-medium text-gray-900">{{ kegiatan.nama_kegiatan }}</div>
+                    <div class="text-xs text-gray-500">{{ kegiatan.file_name }}</div>
+                  </td>
+                  <td class="p-2 text-gray-600">{{ kegiatan.nama_kategori }}</td>
+                  <td class="p-2 text-center font-semibold text-gray-900">{{ kegiatan.poin_kum }}</td>
+                  <td class="p-2">
+                    <code v-if="kegiatan.kegiatan_create_tx" 
+                      class="text-xs font-mono text-blue-600 break-all block max-w-[150px]"
+                      :title="kegiatan.kegiatan_create_tx"
+                    >
+                      {{ kegiatan.kegiatan_create_tx.substring(0, 12) }}...
+                    </code>
+                    <span v-else class="text-xs text-gray-400">-</span>
+                  </td>
+                  <td class="p-2">
+                    <code v-if="kegiatan.kegiatan_verify_tx" 
+                      class="text-xs font-mono text-green-600 break-all block max-w-[150px]"
+                      :title="kegiatan.kegiatan_verify_tx"
+                    >
+                      {{ kegiatan.kegiatan_verify_tx.substring(0, 12) }}...
+                    </code>
+                    <span v-else class="text-xs text-gray-400">-</span>
+                  </td>
+                  <td class="p-2 text-center">
+                    <span 
+                      class="text-xs px-2 py-1 rounded-full font-medium"
+                      :class="{
+                        'bg-green-100 text-green-700': kegiatan.status_saat_snapshot === 'verified',
+                        'bg-gray-100 text-gray-700': kegiatan.status_saat_snapshot !== 'verified'
+                      }"
+                    >
+                      {{ kegiatan.status_saat_snapshot }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot class="bg-gray-50 border-t">
+                <tr>
+                  <td colspan="2" class="p-2 text-right font-semibold text-gray-900">Total:</td>
+                  <td class="p-2 text-center font-bold text-gray-900">{{ snapshotData.total_poin }}</td>
+                  <td colspan="3"></td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       </div>
@@ -237,6 +334,8 @@ const store = useUsulanStore()
 
 const usulan = computed(() => store.currentUsulan)
 const auditTrail = ref([])
+const snapshotData = ref(null)
+const loadingSnapshot = ref(false)
 const sortOrder = ref('asc') // 'asc' = oldest first, 'desc' = newest first
 const showTolakModal = ref(false)
 const catatanPenolakan = ref('')
@@ -311,6 +410,20 @@ async function fetchAuditTrail() {
   }
 }
 
+async function fetchSnapshot() {
+  loadingSnapshot.value = true
+  try {
+    const { data } = await usulanApi.getSnapshot(route.params.id)
+    snapshotData.value = data.data || null
+    console.log('Snapshot loaded:', snapshotData.value)
+  } catch (error) {
+    console.error('Failed to load snapshot:', error)
+    snapshotData.value = null
+  } finally {
+    loadingSnapshot.value = false
+  }
+}
+
 async function handleProses() {
   await store.proses(route.params.id)
   await store.fetchById(route.params.id)
@@ -338,6 +451,9 @@ async function handleTerbitkanSk() {
 
 onMounted(async () => {
   await store.fetchById(route.params.id)
-  await fetchAuditTrail()
+  await Promise.all([
+    fetchAuditTrail(),
+    fetchSnapshot()
+  ])
 })
 </script>

@@ -582,11 +582,12 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       try {
         const txId = await fabricClient.recordKegiatanVerification(id, status, userId);
         if (txId) {
+          // Use tx_id_verify_fabric for verification transactions
           await pool.query(
-            'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
+            'UPDATE sk.kegiatan_dosen SET tx_id_verify_fabric = $1 WHERE id = $2',
             [txId, id]
           );
-          result.rows[0].tx_id_fabric = txId;
+          result.rows[0].tx_id_verify_fabric = txId;
         }
       } catch (fabricErr) {
         console.warn('⚠️  Blockchain verification recording failed:', fabricErr.message);
