@@ -250,39 +250,61 @@ class Kegiatan {
     try {
       await client.query('BEGIN');
 
-      // Get parent version
-      const parentQuery = 'SELECT versi FROM sk.kegiatan_dosen WHERE id = $1';
+      // Get parent kegiatan details
+      const parentQuery = `
+        SELECT versi, referensi_id, dosen_id, ref_kegiatan_id, poin_kum, deskripsi,
+               file_name, file_path, file_hash, file_size, document_url
+        FROM sk.kegiatan_dosen 
+        WHERE id = $1 AND deleted_at IS NULL
+      `;
       const parentResult = await client.query(parentQuery, [parentId]);
       
       if (parentResult.rows.length === 0) {
         throw new Error('Parent kegiatan not found');
       }
 
-      const parentVersion = parentResult.rows[0].versi;
+      const parent = parentResult.rows[0];
+      
+      // Find the root kegiatan ID (for linking the entire revision chain)
+      const rootId = parent.referensi_id || parentId;
+
+      // Merge parent data with new data (new data takes precedence)
+      // If file fields are not provided, copy from parent
+      const mergedData = {
+        dosen_id: kegiatanData.dosen_id || parent.dosen_id,
+        ref_kegiatan_id: kegiatanData.ref_kegiatan_id || parent.ref_kegiatan_id,
+        poin_kum: kegiatanData.poin_kum !== undefined ? kegiatanData.poin_kum : parent.poin_kum,
+        deskripsi: kegiatanData.deskripsi !== undefined ? kegiatanData.deskripsi : parent.deskripsi,
+        file_name: kegiatanData.file_name || parent.file_name,
+        file_path: kegiatanData.file_path || parent.file_path,
+        file_hash: kegiatanData.file_hash || parent.file_hash,
+        file_size: kegiatanData.file_size !== undefined ? kegiatanData.file_size : parent.file_size,
+        document_url: kegiatanData.document_url !== undefined ? kegiatanData.document_url : parent.document_url,
+      };
 
       // Create new version
       const insertQuery = `
         INSERT INTO sk.kegiatan_dosen (
           dosen_id, ref_kegiatan_id, poin_kum, deskripsi,
           file_name, file_path, file_hash, file_size, document_url,
-          versi, referensi_id
+          versi, referensi_id, status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unverified')
         RETURNING *
       `;
 
       const values = [
-        kegiatanData.dosen_id,
-        kegiatanData.ref_kegiatan_id,
-        kegiatanData.poin_kum,
-        kegiatanData.deskripsi,
-        kegiatanData.file_name,
-        kegiatanData.file_path,
-        kegiatanData.file_hash,
-        kegiatanData.file_size,
-        kegiatanData.document_url,
-        parentVersion + 1,
-        parentId,
+        mergedData.dosen_id,
+        mergedData.ref_kegiatan_id,
+        mergedData.poin_kum,
+        mergedData.deskripsi,
+        mergedData.file_name,
+        mergedData.file_path,
+        mergedData.file_hash,
+        mergedData.file_size,
+        mergedData.document_url,
+        parent.versi + 1,
+        rootId, // Link to root, not just parent
       ];
 
       const result = await client.query(insertQuery, values);
@@ -295,6 +317,63 @@ class Kegiatan {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Get revision chain (all versions of a kegiatan)
+   * @param {string} kegiatanId - Kegiatan ID (any version in the chain)
+   * @returns {Promise<Array>}
+   */
+  static async getRevisionChain(kegiatanId) {
+    try {
+      const query = `
+        SELECT * FROM sk.get_revision_chain($1)
+      `;
+
+      const result = await pool.query(query, [kegiatanId]);
+      return result.rows;
+    } catch (error) {
+      console.error('Error in Kegiatan.getRevisionChain:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get latest revision in a chain
+   * @param {string} kegiatanId - Kegiatan ID (any version in the chain)
+   * @returns {Promise<string|null>} - Latest kegiatan ID
+   */
+  static async getLatestRevision(kegiatanId) {
+    try {
+      const query = `
+        SELECT sk.get_latest_revision($1) as latest_id
+      `;
+
+      const result = await pool.query(query, [kegiatanId]);
+      return result.rows[0]?.latest_id || null;
+    } catch (error) {
+      console.error('Error in Kegiatan.getLatestRevision:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get revision count for a kegiatan chain
+   * @param {string} kegiatanId - Kegiatan ID (any version in the chain)
+   * @returns {Promise<number>}
+   */
+  static async getRevisionCount(kegiatanId) {
+    try {
+      const query = `
+        SELECT sk.get_revision_count($1) as count
+      `;
+
+      const result = await pool.query(query, [kegiatanId]);
+      return parseInt(result.rows[0]?.count || 0);
+    } catch (error) {
+      console.error('Error in Kegiatan.getRevisionCount:', error);
+      throw error;
     }
   }
 

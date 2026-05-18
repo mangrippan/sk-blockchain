@@ -13,6 +13,7 @@ const { pool } = require('../../config/database');
 const { auth, checkRole } = require('../../middleware/auth');
 const { hashFileBuffer: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
+const Kegiatan = require('../../models/Kegiatan');
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -510,11 +511,15 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [verified, rejected, revision_requested]
+ *                 enum: [verified, rejected]
+ *               allow_revision:
+ *                 type: boolean
+ *                 description: If true when rejecting, allows dosen to revise and resubmit
  *               rejection_reason:
  *                 type: string
  *               catatan_penolakan:
  *                 type: string
+ *                 description: Required when allow_revision is true
  *     responses:
  *       200:
  *         description: Kegiatan status updated
@@ -528,24 +533,37 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, rejection_reason, catatan_penolakan } = req.body;
+    const { status, allow_revision = false, rejection_reason, catatan_penolakan } = req.body;
     const userId = req.user.id;
     
-    if (!status || !['verified', 'rejected', 'revision_requested'].includes(status)) {
+    if (!status || !['verified', 'rejected'].includes(status)) {
       return res.status(400).json({
         error: 'Invalid status',
-        allowed: ['verified', 'rejected', 'revision_requested'],
+        allowed: ['verified', 'rejected'],
+      });
+    }
+    
+    // Validate rejection notes when rejecting
+    if (status === 'rejected' && !catatan_penolakan && !rejection_reason) {
+      return res.status(400).json({
+        error: 'Catatan penolakan or rejection reason is required when rejecting',
       });
     }
     
     // Check if kegiatan exists
-    const checkQuery = 'SELECT id FROM sk.kegiatan_dosen WHERE id = $1 AND deleted_at IS NULL';
+    const checkQuery = 'SELECT id, status FROM sk.kegiatan_dosen WHERE id = $1 AND deleted_at IS NULL';
     const checkResult = await pool.query(checkQuery, [id]);
     
     if (checkResult.rows.length === 0) {
       return res.status(404).json({
         error: 'Kegiatan not found',
       });
+    }
+    
+    // Determine final status based on allow_revision flag
+    let finalStatus = status;
+    if (status === 'rejected' && allow_revision) {
+      finalStatus = 'revision_requested';
     }
     
     // Update status
@@ -561,7 +579,7 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     `;
     
     const values = [
-      status,
+      finalStatus,
       userId,
       rejection_reason || null,
       catatan_penolakan || null,
@@ -570,17 +588,23 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     
     const result = await pool.query(query, values);
     
-    // Log audit trail
+    // Log audit trail with clear differentiation
+    const actionDescription = finalStatus === 'revision_requested' 
+      ? 'Kegiatan rejected with revision allowed'
+      : finalStatus === 'rejected'
+      ? 'Kegiatan rejected (final)'
+      : 'Kegiatan verified';
+      
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values, ip_address, description)
        VALUES ($1, 'VERIFY', 'kegiatan_dosen', $2, $3, $4, $5)`,
-      [userId, id, JSON.stringify({ status, rejection_reason, catatan_penolakan }), req.ip, `Kegiatan ${status}`]
+      [userId, id, JSON.stringify({ status: finalStatus, allow_revision, rejection_reason, catatan_penolakan }), req.ip, actionDescription]
     );
 
     // Record verification on blockchain
     if (fabricClient.isFabricEnabled()) {
       try {
-        const txId = await fabricClient.recordKegiatanVerification(id, status, userId);
+        const txId = await fabricClient.recordKegiatanVerification(id, finalStatus, userId);
         if (txId) {
           // Use tx_id_verify_fabric for verification transactions
           await pool.query(
@@ -595,7 +619,7 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     }
 
     res.json({
-      message: `Kegiatan ${status} successfully`,
+      message: `Kegiatan ${finalStatus === 'revision_requested' ? 'revision requested' : finalStatus} successfully`,
       data: result.rows[0],
     });
     
@@ -603,6 +627,204 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     console.error('Verify kegiatan error:', error);
     res.status(500).json({
       error: 'Failed to update kegiatan status',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/kegiatan/{id}/resubmit:
+ *   post:
+ *     summary: Resubmit rejected kegiatan with revisions
+ *     description: Create a new version of a kegiatan that was rejected with revision requested
+ *     tags: [Kegiatan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Parent kegiatan ID (the one with status 'revision_requested')
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - ref_kegiatan_id
+ *             properties:
+ *               ref_kegiatan_id:
+ *                 type: integer
+ *               deskripsi:
+ *                 type: string
+ *               dokumen:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional - new file upload. If not provided, uses parent's file
+ *     responses:
+ *       201:
+ *         description: Kegiatan resubmitted successfully
+ *       400:
+ *         description: Invalid request or parent kegiatan status
+ *       403:
+ *         description: Forbidden - not the owner
+ *       404:
+ *         description: Parent kegiatan not found
+ *       500:
+ *         description: Failed to resubmit kegiatan
+ */
+router.post('/:id/resubmit', auth, upload.single('dokumen'), async (req, res) => {
+  try {
+    const { id: parentId } = req.params;
+    const userId = req.user.id;
+    const { ref_kegiatan_id, deskripsi } = req.body;
+    
+    // Validate parent kegiatan exists and has correct status
+    const parentQuery = `
+      SELECT k.*, ref.poin_maksimal
+      FROM sk.kegiatan_dosen k
+      JOIN sk.ref_kegiatan_kum ref ON k.ref_kegiatan_id = ref.id
+      WHERE k.id = $1 AND k.deleted_at IS NULL
+    `;
+    const parentResult = await pool.query(parentQuery, [parentId]);
+    
+    if (parentResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Parent kegiatan not found',
+      });
+    }
+    
+    const parent = parentResult.rows[0];
+    
+    // Permission check: only owner can resubmit
+    if (parent.dosen_id !== userId) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only resubmit your own kegiatan',
+      });
+    }
+    
+    // Status validation: must be revision_requested
+    if (parent.status !== 'revision_requested') {
+      return res.status(400).json({
+        error: 'Invalid parent status',
+        message: `Can only resubmit kegiatan with status 'revision_requested'. Current status: ${parent.status}`,
+      });
+    }
+    
+    // Get ref_kegiatan details for poin_kum
+    const refKegiatanId = ref_kegiatan_id || parent.ref_kegiatan_id;
+    const refQuery = 'SELECT poin_maksimal FROM sk.ref_kegiatan_kum WHERE id = $1';
+    const refResult = await pool.query(refQuery, [refKegiatanId]);
+    
+    if (refResult.rows.length === 0) {
+      return res.status(400).json({
+        error: 'Invalid ref_kegiatan_id',
+      });
+    }
+    
+    const poin_kum = refResult.rows[0].poin_maksimal;
+    
+    // Handle file upload or copy from parent
+    let fileData = {
+      file_name: parent.file_name,
+      file_path: parent.file_path,
+      file_hash: parent.file_hash,
+      file_size: parent.file_size,
+      document_url: parent.document_url,
+    };
+    
+    if (req.file) {
+      // New file uploaded - calculate hash
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const fileHash = generateFileHash(fileBuffer);
+      
+      fileData = {
+        file_name: req.file.originalname,
+        file_path: req.file.path,
+        file_hash: fileHash,
+        file_size: req.file.size,
+        document_url: `/uploads/${req.file.filename}`,
+      };
+    }
+    
+    // Create revision using the model method
+    const revisionData = {
+      dosen_id: userId,
+      ref_kegiatan_id: refKegiatanId,
+      poin_kum: poin_kum,
+      deskripsi: deskripsi || parent.deskripsi,
+      ...fileData,
+    };
+    
+    const newKegiatan = await Kegiatan.createRevision(parentId, revisionData);
+    
+    // Log audit trail
+    await pool.query(
+      `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values, ip_address, description)
+       VALUES ($1, 'CREATE_REVISION', 'kegiatan_dosen', $2, $3, $4, $5)`,
+      [
+        userId, 
+        newKegiatan.id, 
+        JSON.stringify({ parent_id: parentId, versi: newKegiatan.versi }), 
+        req.ip, 
+        `Kegiatan revision v${newKegiatan.versi} created from parent ${parentId}`
+      ]
+    );
+    
+    // Submit to blockchain if available
+    if (fabricClient.isFabricEnabled()) {
+      try {
+        const txId = await fabricClient.recordKegiatanCreation(
+          newKegiatan.id,
+          userId,
+          fileData.file_hash,
+          refKegiatanId,
+          poin_kum,
+          { parentId: parentId, versi: newKegiatan.versi }
+        );
+        
+        if (txId) {
+          await Kegiatan.updateBlockchainTx(newKegiatan.id, txId);
+          newKegiatan.tx_id_fabric = txId;
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain submission failed for revision:', fabricErr.message);
+      }
+    }
+    
+    // Get full kegiatan details with joins
+    const fullKegiatan = await Kegiatan.findById(newKegiatan.id);
+    
+    res.status(201).json({
+      message: 'Kegiatan resubmitted successfully',
+      data: fullKegiatan,
+      revision_info: {
+        parent_id: parentId,
+        version: newKegiatan.versi,
+        is_new_file: !!req.file,
+      },
+    });
+    
+  } catch (error) {
+    console.error('Resubmit kegiatan error:', error);
+    
+    // Clean up uploaded file if there was an error
+    if (req.file && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkErr) {
+        console.error('Failed to clean up file:', unlinkErr);
+      }
+    }
+    
+    res.status(500).json({
+      error: 'Failed to resubmit kegiatan',
       message: error.message,
     });
   }
@@ -745,6 +967,83 @@ router.get('/:id/audit', auth, async (req, res) => {
     console.error('Get audit trail error:', error);
     res.status(500).json({
       error: 'Failed to fetch audit trail',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/kegiatan/{id}/revisions:
+ *   get:
+ *     summary: Get revision chain for kegiatan
+ *     description: Retrieve all versions of a kegiatan (revision history)
+ *     tags: [Kegiatan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Revision chain data
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Kegiatan not found
+ *       500:
+ *         description: Failed to fetch revision chain
+ */
+router.get('/:id/revisions', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check kegiatan exists and user has access
+    const checkQuery = `
+      SELECT dosen_id FROM sk.kegiatan_dosen WHERE id = $1 AND deleted_at IS NULL
+    `;
+    const checkResult = await pool.query(checkQuery, [id]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Kegiatan not found' });
+    }
+
+    // Dosen only sees own kegiatan revisions
+    if (userRole === 'dosen' && checkResult.rows[0].dosen_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Get revision chain from database function
+    const revisionChain = await Kegiatan.getRevisionChain(id);
+    const revisionCount = await Kegiatan.getRevisionCount(id);
+
+    // Enhance with full kegiatan details for each version
+    const detailedChain = await Promise.all(
+      revisionChain.map(async (version) => {
+        const fullData = await Kegiatan.findById(version.id);
+        return {
+          ...fullData,
+          is_latest: version.is_latest,
+        };
+      })
+    );
+
+    res.json({
+      data: detailedChain,
+      total_versions: revisionChain.length,
+      revision_count: revisionCount,
+      latest_version: detailedChain.find(v => v.is_latest),
+    });
+  } catch (error) {
+    console.error('Get revision chain error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch revision chain',
       message: error.message,
     });
   }

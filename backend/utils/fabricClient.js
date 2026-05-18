@@ -132,19 +132,33 @@ async function evaluateTransaction(functionName, ...args) {
 
 /**
  * Record a kegiatan creation on the blockchain
+ * @param {string} kegiatanId - Kegiatan UUID
+ * @param {number} dosenId - Dosen user ID
+ * @param {string} fileHash - Document SHA-256 hash
+ * @param {number} refKegiatanId - Reference kegiatan ID
+ * @param {number} poinKum - Point value
+ * @param {object} revisionInfo - Optional revision info {parentId, versi}
  * @returns {string|null} Transaction ID or null if Fabric unavailable
  */
-async function recordKegiatanCreation(kegiatanId, dosenId, fileHash, refKegiatanId, poinKum) {
+async function recordKegiatanCreation(kegiatanId, dosenId, fileHash, refKegiatanId, poinKum, revisionInfo = null) {
   const timestamp = new Date().toISOString();
-  const result = await submitTransaction(
-    'CreateKegiatan',
+  
+  const args = [
     kegiatanId,
     String(dosenId),
     fileHash,
     String(refKegiatanId),
     String(poinKum),
     timestamp
-  );
+  ];
+  
+  // Add revision parameters if this is a revision
+  if (revisionInfo && revisionInfo.parentId) {
+    args.push(revisionInfo.parentId);
+    args.push(String(revisionInfo.versi || 1));
+  }
+  
+  const result = await submitTransaction('CreateKegiatan', ...args);
   return result ? result.txId : null;
 }
 

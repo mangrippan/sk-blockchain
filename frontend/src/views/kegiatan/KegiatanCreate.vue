@@ -28,12 +28,22 @@
             required
             :disabled="!form.kategori_id"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
+            style="max-height: 300px;"
           >
             <option value="">Pilih Jenis Kegiatan</option>
-            <option v-for="keg in kegiatanList" :key="keg.id" :value="keg.id">
-              {{ keg.nama_kegiatan }} (Max: {{ keg.poin_maksimal }} poin)
+            <option 
+              v-for="keg in kegiatanList" 
+              :key="keg.id" 
+              :value="keg.id"
+              class="py-2"
+              :title="keg.nama_kegiatan"
+            >
+              {{ truncateText(keg.nama_kegiatan, 80) }} ({{ keg.poin_maksimal }} poin)
             </option>
           </select>
+          <p v-if="form.ref_kegiatan_id" class="text-xs text-gray-500 mt-1">
+            {{ getSelectedKegiatanName() }}
+          </p>
         </div>
         
         <!-- Deskripsi -->
@@ -162,4 +172,32 @@ async function handleSubmit() {
     loading.value = false
   }
 }
+
+function truncateText(text, maxLength) {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
+}
+
+function getSelectedKegiatanName() {
+  if (!form.ref_kegiatan_id) return ''
+  const selected = kegiatanList.value.find(k => k.id === form.ref_kegiatan_id)
+  return selected ? selected.nama_kegiatan : ''
+}
 </script>
+
+<style scoped>
+/* Styling for select dropdown to handle long text */
+select option {
+  padding: 8px 12px;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+/* Ensure dropdown doesn't overflow */
+select {
+  overflow-y: auto;
+}
+</style>

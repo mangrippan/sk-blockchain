@@ -371,7 +371,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', require('../../middleware/auth').auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, public_id, nip_nidn, nama_lengkap, email, role, department, jabatan_saat_ini, created_at, last_login
+      `SELECT id, public_id, nip_nidn, nama_lengkap, email, role, department, jabatan_saat_ini, jabatan_id, created_at, last_login
        FROM sk.users
        WHERE id = $1 AND deleted_at IS NULL`,
       [req.user.id]
@@ -383,14 +383,74 @@ router.get('/me', require('../../middleware/auth').auth, async (req, res) => {
       });
     }
     
+    const user = result.rows[0];
+    
+    // Default jabatan_id = 1 (Tenaga Pengajar) jika belum ada, hanya di response
+    if (!user.jabatan_id && user.role === 'dosen') {
+      user.jabatan_id = 1;
+    }
+    
     res.json({
-      user: result.rows[0],
+      user: user,
     });
     
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({
       error: 'Failed to get user info',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/auth/profile:
+ *   get:
+ *     summary: Get current user profile (alias for /me)
+ *     description: Retrieve authenticated user's profile information
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
+router.get('/profile', require('../../middleware/auth').auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, public_id, nip_nidn, nama_lengkap, email, role, department, jabatan_saat_ini, jabatan_id, created_at, last_login
+       FROM sk.users
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [req.user.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found',
+      });
+    }
+    
+    const user = result.rows[0];
+    
+    // Default jabatan_id = 1 (Tenaga Pengajar) jika belum ada, hanya di response
+    // Sehingga saat mengajukan usulan, otomatis bisa langsung ke Asisten Ahli (id=2)
+    if (!user.jabatan_id && user.role === 'dosen') {
+      user.jabatan_id = 1;
+    }
+    
+    res.json({
+      user: user,
+    });
+    
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    res.status(500).json({
+      error: 'Failed to get user profile',
       message: error.message,
     });
   }

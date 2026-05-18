@@ -28,6 +28,17 @@ export const kegiatanApi = {
     return api.get(`/kegiatan/${id}/audit`)
   },
 
+  getRevisions(id) {
+    return api.get(`/kegiatan/${id}/revisions`)
+  },
+
+  resubmit(id, data) {
+    const isFormData = data instanceof FormData
+    return api.post(`/kegiatan/${id}/resubmit`, data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : {})
+  },
+
   getDashboardStats() {
     return api.get('/kegiatan/stats/dashboard')
   },

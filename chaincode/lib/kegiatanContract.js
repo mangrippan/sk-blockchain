@@ -32,8 +32,10 @@ class KegiatanContract extends Contract {
    * @param {string} refKegiatanId - Reference kegiatan ID
    * @param {string} poinKum - Point value
    * @param {string} timestamp - ISO timestamp of creation
+   * @param {string} parentKegiatanId - Optional: Parent kegiatan ID if this is a revision (default: null)
+   * @param {string} versi - Optional: Version number if this is a revision (default: 1)
    */
-  async CreateKegiatan(ctx, kegiatanId, dosenId, fileHash, refKegiatanId, poinKum, timestamp) {
+  async CreateKegiatan(ctx, kegiatanId, dosenId, fileHash, refKegiatanId, poinKum, timestamp, parentKegiatanId = null, versi = '1') {
     // Check if kegiatan already exists
     const exists = await this.KegiatanExists(ctx, kegiatanId);
     if (exists) {
@@ -48,6 +50,8 @@ class KegiatanContract extends Contract {
       refKegiatanId: refKegiatanId,
       poinKum: parseFloat(poinKum),
       status: 'unverified',
+      parentKegiatanId: parentKegiatanId,
+      versi: parseInt(versi),
       createdAt: timestamp,
       updatedAt: timestamp,
       verifiedBy: null,
@@ -61,6 +65,8 @@ class KegiatanContract extends Contract {
       id: kegiatanId,
       fileHash: fileHash,
       dosenId: dosenId,
+      parentKegiatanId: parentKegiatanId,
+      versi: parseInt(versi),
     })));
 
     return JSON.stringify(kegiatan);
@@ -81,11 +87,11 @@ class KegiatanContract extends Contract {
   }
 
   /**
-   * VerifyKegiatan - Update kegiatan status to verified/rejected
+   * VerifyKegiatan - Update kegiatan status to verified/rejected/revision_requested
    * 
    * @param {Context} ctx - Transaction context
    * @param {string} kegiatanId - UUID of the kegiatan
-   * @param {string} newStatus - New status (verified/rejected)
+   * @param {string} newStatus - New status (verified/rejected/revision_requested)
    * @param {string} verifiedBy - User ID who verified
    * @param {string} timestamp - ISO timestamp of verification
    */
@@ -97,6 +103,12 @@ class KegiatanContract extends Contract {
 
     const kegiatan = JSON.parse(kegiatanJSON.toString());
     
+    // Validate status
+    const validStatuses = ['verified', 'rejected', 'revision_requested'];
+    if (!validStatuses.includes(newStatus)) {
+      throw new Error(`Invalid status: ${newStatus}. Must be one of: ${validStatuses.join(', ')}`);
+    }
+    
     const oldStatus = kegiatan.status;
     kegiatan.status = newStatus;
     kegiatan.verifiedBy = verifiedBy;
@@ -105,12 +117,22 @@ class KegiatanContract extends Contract {
 
     await ctx.stub.putState(kegiatanId, Buffer.from(JSON.stringify(kegiatan)));
 
-    ctx.stub.setEvent('KegiatanVerified', Buffer.from(JSON.stringify({
-      id: kegiatanId,
-      oldStatus: oldStatus,
-      newStatus: newStatus,
-      verifiedBy: verifiedBy,
-    })));
+    // Emit different events based on status
+    if (newStatus === 'revision_requested') {
+      ctx.stub.setEvent('KegiatanRevisionRequested', Buffer.from(JSON.stringify({
+        id: kegiatanId,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        verifiedBy: verifiedBy,
+      })));
+    } else {
+      ctx.stub.setEvent('KegiatanVerified', Buffer.from(JSON.stringify({
+        id: kegiatanId,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        verifiedBy: verifiedBy,
+      })));
+    }
 
     return JSON.stringify(kegiatan);
   }
