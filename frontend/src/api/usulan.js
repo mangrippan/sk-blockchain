@@ -40,4 +40,8 @@ export const usulanApi = {
   getSnapshot(id) {
     return api.get(`/usulan/${id}/snapshot`)
   },
+
+  validateBlockchain(id) {
+    return api.get(`/usulan/${id}/validate-blockchain`)
+  },
 }

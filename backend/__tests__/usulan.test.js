@@ -326,11 +326,129 @@ describe('Usulan Kenaikan Pangkat API', () => {
       expect(Array.isArray(response.body.data.database)).toBe(true);
     });
 
+    it('should include integrity field for SK issued usulan', async () => {
+      // This test requires an usulan with sk_issued status
+      // Skip if fabric is disabled or usulan not in correct state
+      if (!createdUsulanId) return;
+
+      const response = await request(app)
+        .get(`/api/v1/usulan/${createdUsulanId}/audit`)
+        .set('Authorization', `Bearer ${dosenToken}`)
+        .expect(200);
+
+      // integrity field may be null if SK not issued or blockchain disabled
+      expect(response.body).toHaveProperty('integrity');
+    });
+
     it('should return 404 for non-existent usulan', async () => {
       await request(app)
         .get('/api/v1/usulan/00000000-0000-0000-0000-000000000000/audit')
         .set('Authorization', `Bearer ${dosenToken}`)
         .expect(404);
+    });
+  });
+
+  // ==========================================
+  // GET /api/v1/usulan/:id/validate-blockchain - Blockchain Validation
+  // ==========================================
+  describe('GET /api/v1/usulan/:id/validate-blockchain', () => {
+    it('should validate blockchain integrity for usulan', async () => {
+      if (!createdUsulanId) return;
+
+      const response = await request(app)
+        .get(`/api/v1/usulan/${createdUsulanId}/validate-blockchain`)
+        .set('Authorization', `Bearer ${dosenToken}`);
+
+      // Should return 200 (valid) or 409 (conflict/invalid)
+      expect([200, 409]).toContain(response.status);
+      
+      expect(response.body).toHaveProperty('valid');
+      expect(response.body).toHaveProperty('message');
+      expect(response.body).toHaveProperty('checks');
+      expect(response.body).toHaveProperty('details');
+      expect(response.body.checks).toHaveProperty('blockchainEnabled');
+    });
+
+    it('should return validation checks structure', async () => {
+      if (!createdUsulanId) return;
+
+      const response = await request(app)
+        .get(`/api/v1/usulan/${createdUsulanId}/validate-blockchain`)
+        .set('Authorization', `Bearer ${dosenToken}`);
+
+      expect(response.body.checks).toHaveProperty('blockchainRecordExists');
+      expect(response.body.checks).toHaveProperty('skHashMatches');
+      expect(response.body.checks).toHaveProperty('snapshotHashMatches');
+    });
+
+    it('should detect tampering when SK hash is changed', async () => {
+      // Create a test usulan with SK issued
+      const testUsulanResult = await pool.query(
+        `INSERT INTO sk.usulan_kenaikan_pangkat 
+         (dosen_id, jabatan_tujuan, total_poin_diajukan, status, sk_document_hash, tx_id_fabric)
+         VALUES ($1, 'Lektor', 100, 'sk_issued', 'original-hash', 'test-tx-id')
+         RETURNING id`,
+        [testDosen.id]
+      );
+      const testUsulanId = testUsulanResult.rows[0].id;
+
+      // Change the hash to simulate tampering
+      await pool.query(
+        'UPDATE sk.usulan_kenaikan_pangkat SET sk_document_hash = $1 WHERE id = $2',
+        ['tampered-hash', testUsulanId]
+      );
+
+      const response = await request(app)
+        .get(`/api/v1/usulan/${testUsulanId}/validate-blockchain`)
+        .set('Authorization', `Bearer ${dosenToken}`);
+
+      // If blockchain is enabled and has record, should detect mismatch
+      // Otherwise should return warning that blockchain is disabled
+      if (response.body.checks.blockchainEnabled && response.body.checks.blockchainRecordExists) {
+        expect(response.body.valid).toBe(false);
+        expect(response.body.errors).toBeDefined();
+      }
+
+      // Cleanup
+      await pool.query('DELETE FROM sk.usulan_kenaikan_pangkat WHERE id = $1', [testUsulanId]);
+    });
+
+    it('should return 404 for non-existent usulan', async () => {
+      await request(app)
+        .get('/api/v1/usulan/00000000-0000-0000-0000-000000000000/validate-blockchain')
+        .set('Authorization', `Bearer ${dosenToken}`)
+        .expect(404);
+    });
+
+    it('should deny access for other dosen usulan', async () => {
+      if (!createdUsulanId) return;
+
+      // Create another dosen
+      const otherDosen = await createTestUser({
+        nip_nidn: `OTHERDOSEN${Date.now()}`,
+        email: `other_${Date.now()}@test.com`,
+        role: 'dosen',
+      });
+      const otherToken = generateTestToken(otherDosen.id, 'dosen');
+
+      await request(app)
+        .get(`/api/v1/usulan/${createdUsulanId}/validate-blockchain`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(403);
+
+      // Cleanup
+      await pool.query('DELETE FROM sk.users WHERE id = $1', [otherDosen.id]);
+    });
+
+    it('should allow admin to validate any usulan', async () => {
+      if (!createdUsulanId) return;
+
+      const response = await request(app)
+        .get(`/api/v1/usulan/${createdUsulanId}/validate-blockchain`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect([200, 409]).toContain(response.status);
+      expect(response.body).toHaveProperty('valid');
     });
   });
 });

@@ -205,6 +205,16 @@
               ({{ sortedAuditTrail.length }} riwayat)
             </span>
           </h2>
+          <button
+            v-if="usulan.status === 'sk_issued'"
+            @click="validateBlockchain"
+            :disabled="validating"
+            class="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          >
+            <span v-if="validating">⏳</span>
+            <span v-else>🔍</span>
+            {{ validating ? 'Validating...' : 'Validate Blockchain' }}
+          </button>
           <div v-if="sortedAuditTrail.length > 0" class="flex flex-col items-end gap-1">
             <span class="text-xs text-gray-600">
               Urutkan:
@@ -220,6 +230,86 @@
         </div>
         <div v-if="sortedAuditTrail.length === 0" class="text-gray-500 text-sm">Belum ada riwayat</div>
         <div v-else>
+          <!-- Integrity Status (from audit trail response) -->
+          <div v-if="integrityStatus" class="mb-4 rounded-lg p-4 border" :class="{
+            'bg-green-50 border-green-200': integrityStatus.skHashValid && integrityStatus.snapshotHashValid,
+            'bg-red-50 border-red-200': integrityStatus.skHashValid === false || integrityStatus.snapshotHashValid === false,
+            'bg-gray-50 border-gray-200': integrityStatus.skHashValid === null
+          }">
+            <div class="flex items-start gap-3">
+              <span class="text-2xl">
+                {{ integrityStatus.skHashValid === false || integrityStatus.snapshotHashValid === false ? '⚠️' : integrityStatus.skHashValid ? '✅' : 'ℹ️' }}
+              </span>
+              <div class="flex-1">
+                <div class="font-semibold mb-2" :class="{
+                  'text-green-800': integrityStatus.skHashValid && integrityStatus.snapshotHashValid,
+                  'text-red-800': integrityStatus.skHashValid === false || integrityStatus.snapshotHashValid === false,
+                  'text-gray-800': integrityStatus.skHashValid === null
+                }">
+                  Blockchain Integrity Status
+                </div>
+                <div class="text-sm space-y-2">
+                  <div v-if="integrityStatus.skHashValid !== null" class="flex items-center gap-2">
+                    <span>{{ integrityStatus.skHashValid ? '✓' : '✗' }}</span>
+                    <span :class="integrityStatus.skHashValid ? 'text-green-700' : 'text-red-700'">
+                      SK Document Hash: {{ integrityStatus.skHashValid ? 'Valid' : 'MISMATCH - Possible Tampering!' }}
+                    </span>
+                  </div>
+                  <div v-if="integrityStatus.snapshotHashValid !== null" class="flex items-center gap-2">
+                    <span>{{ integrityStatus.snapshotHashValid ? '✓' : '✗' }}</span>
+                    <span :class="integrityStatus.snapshotHashValid ? 'text-green-700' : 'text-red-700'">
+                      Snapshot Hash: {{ integrityStatus.snapshotHashValid ? 'Valid' : 'MISMATCH - Data may have been tampered!' }}
+                    </span>
+                  </div>
+                  <div class="text-xs text-gray-600 mt-2 pt-2 border-t">
+                    {{ integrityStatus.message }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Validation Result Modal -->
+          <div v-if="validationResult" class="mb-4 bg-white border-2 rounded-lg p-4 shadow-lg" :class="{
+            'border-green-500': validationResult.valid,
+            'border-red-500': !validationResult.valid
+          }">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="text-2xl">{{ validationResult.valid ? '✅' : '❌' }}</span>
+                <h3 class="font-semibold text-lg">
+                  {{ validationResult.message }}
+                </h3>
+              </div>
+              <button @click="validationResult = null" class="text-gray-400 hover:text-gray-600">
+                ✕
+              </button>
+            </div>
+            
+            <div v-if="validationResult.errors && validationResult.errors.length > 0" class="mb-3">
+              <div class="text-sm font-medium text-red-700 mb-1">Errors:</div>
+              <ul class="text-sm text-red-600 list-disc list-inside space-y-1">
+                <li v-for="(error, idx) in validationResult.errors" :key="idx">{{ error }}</li>
+              </ul>
+            </div>
+            
+            <div v-if="validationResult.warnings && validationResult.warnings.length > 0" class="mb-3">
+              <div class="text-sm font-medium text-amber-700 mb-1">Warnings:</div>
+              <ul class="text-sm text-amber-600 list-disc list-inside space-y-1">
+                <li v-for="(warning, idx) in validationResult.warnings" :key="idx">{{ warning }}</li>
+              </ul>
+            </div>
+
+            <div v-if="validationResult.details" class="text-xs space-y-2">
+              <div class="font-medium text-gray-700">Validation Checks:</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div v-for="(value, key) in validationResult.checks" :key="key" class="flex items-center gap-1">
+                  <span>{{ value ? '✓' : '✗' }}</span>
+                  <span :class="value ? 'text-green-600' : 'text-gray-400'">{{ formatCheckName(key) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
           <!-- Info: No Blockchain Data -->
           <div v-if="!hasBlockchainData" class="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
             <div class="flex items-start gap-2">
@@ -342,6 +432,9 @@ const catatanPenolakan = ref('')
 const skFile = ref(null)
 const skNumber = ref('')
 const skDate = ref('')
+const integrityStatus = ref(null)
+const validationResult = ref(null)
+const validating = ref(false)
 
 // Computed property for sorted audit trail
 const sortedAuditTrail = computed(() => {
@@ -403,10 +496,13 @@ async function fetchAuditTrail() {
   try {
     const { data } = await usulanApi.getAuditTrail(route.params.id)
     auditTrail.value = data.data || []
+    integrityStatus.value = data.integrity || null
     console.log('Audit trail loaded:', auditTrail.value)
+    console.log('Integrity status:', integrityStatus.value)
   } catch (error) {
     console.error('Failed to load audit trail:', error)
     auditTrail.value = []
+    integrityStatus.value = null
   }
 }
 
@@ -447,6 +543,32 @@ async function handleTerbitkanSk() {
   await store.terbitkanSk(route.params.id, formData)
   await store.fetchById(route.params.id)
   await fetchAuditTrail()
+}
+
+async function validateBlockchain() {
+  validating.value = true
+  validationResult.value = null
+  try {
+    const { data } = await usulanApi.validateBlockchain(route.params.id)
+    validationResult.value = data
+    console.log('Validation result:', data)
+  } catch (error) {
+    console.error('Validation failed:', error)
+    validationResult.value = {
+      valid: false,
+      message: 'Validation request failed',
+      errors: [error.response?.data?.message || error.message]
+    }
+  } finally {
+    validating.value = false
+  }
+}
+
+function formatCheckName(key) {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim()
 }
 
 onMounted(async () => {
