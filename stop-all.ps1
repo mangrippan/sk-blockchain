@@ -9,8 +9,20 @@ Write-Host ""
 
 $ErrorActionPreference = "Continue"
 
-# 1. Stop Fabric Network
-Write-Host "[1/2] Stopping Hyperledger Fabric Network..." -ForegroundColor Yellow
+# 1. Stop Chaincode Containers (CCAAS)
+Write-Host "[1/3] Stopping Chaincode Containers..." -ForegroundColor Yellow
+$chaincodeContainers = docker ps -q --filter "name=chainrank.org"
+if ($chaincodeContainers) {
+    docker stop $chaincodeContainers
+    docker rm $chaincodeContainers
+    Write-Host "Chaincode containers stopped" -ForegroundColor Green
+} else {
+    Write-Host "No chaincode containers running" -ForegroundColor Gray
+}
+Write-Host ""
+
+# 2. Stop Fabric Network
+Write-Host "[2/3] Stopping Hyperledger Fabric Network..." -ForegroundColor Yellow
 Set-Location -Path "fabric-network"
 
 if (Test-Path ".\stop-network.ps1") {
@@ -28,8 +40,8 @@ if (Test-Path ".\stop-network.ps1") {
 Set-Location -Path ".."
 Write-Host ""
 
-# 2. Stop Database
-Write-Host "[2/2] Stopping PostgreSQL Database..." -ForegroundColor Yellow
+# 3. Stop Database
+Write-Host "[3/3] Stopping PostgreSQL Database..." -ForegroundColor Yellow
 docker compose -f docker-compose.dev.yml down
 
 if ($LASTEXITCODE -eq 0) {

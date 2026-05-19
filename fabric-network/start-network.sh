@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CHAINCODE_PATH="$PROJECT_ROOT/chaincode"
-CHANNEL_NAME="mychannel"
+CHANNEL_NAME="skchannel"
 CHAINCODE_NAME="chainrank"
 CHAINCODE_VERSION="1.0"
 CHAINCODE_SEQUENCE="1"

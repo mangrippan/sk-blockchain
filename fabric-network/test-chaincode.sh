@@ -19,7 +19,7 @@ echo "=== Testing CreateKegiatan ==="
 peer chaincode invoke -o localhost:7050 \
   --ordererTLSHostnameOverride orderer.example.com \
   --tls --cafile "$ORDERER_CA" \
-  -C mychannel -n chainrank \
+  -C skchannel -n chainrank \
   --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA" \
   --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_ORG2_CA" \
   -c '{"function":"CreateKegiatan","Args":["kg-test-001","dosen-1","abc123hash","ref-1","10","2026-05-15T00:00:00Z"]}'
@@ -28,17 +28,17 @@ sleep 2
 
 echo ""
 echo "=== Testing ReadKegiatan ==="
-peer chaincode query -C mychannel -n chainrank \
+peer chaincode query -C skchannel -n chainrank \
   -c '{"function":"ReadKegiatan","Args":["kg-test-001"]}'
 
 echo ""
 echo "=== Testing VerifyDocumentHash (valid) ==="
-peer chaincode query -C mychannel -n chainrank \
+peer chaincode query -C skchannel -n chainrank \
   -c '{"function":"VerifyDocumentHash","Args":["kg-test-001","abc123hash"]}'
 
 echo ""
 echo "=== Testing VerifyDocumentHash (tampered) ==="
-peer chaincode query -C mychannel -n chainrank \
+peer chaincode query -C skchannel -n chainrank \
   -c '{"function":"VerifyDocumentHash","Args":["kg-test-001","tampered-hash"]}'
 
 echo ""
@@ -46,7 +46,7 @@ echo "=== Testing AjukanUsulanKenaikanPangkat ==="
 peer chaincode invoke -o localhost:7050 \
   --ordererTLSHostnameOverride orderer.example.com \
   --tls --cafile "$ORDERER_CA" \
-  -C mychannel -n chainrank \
+  -C skchannel -n chainrank \
   --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA" \
   --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_ORG2_CA" \
   -c '{"function":"AjukanUsulanKenaikanPangkat","Args":["usl-test-001","hashNIP123","250","Lektor","null","2026-05-15T00:00:00Z"]}'
@@ -55,7 +55,7 @@ sleep 2
 
 echo ""
 echo "=== Testing GetUsulan ==="
-peer chaincode query -C mychannel -n chainrank \
+peer chaincode query -C skchannel -n chainrank \
   -c '{"function":"GetUsulan","Args":["usl-test-001"]}'
 
 echo ""
