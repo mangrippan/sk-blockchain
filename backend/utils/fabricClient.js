@@ -7,12 +7,12 @@
 
 'use strict';
 
-const { Gateway, Wallets } = require('fabric-network');
+const { Gateway, Wallets, DefaultQueryHandlerStrategies } = require('fabric-network');
 const path = require('path');
 const fs = require('fs');
 
 // Configuration
-const CHANNEL_NAME = process.env.FABRIC_CHANNEL || 'mychannel';
+const CHANNEL_NAME = process.env.FABRIC_CHANNEL || 'skchannel';
 const CHAINCODE_NAME = process.env.FABRIC_CHAINCODE || 'chainrank';
 const FABRIC_ENABLED = process.env.FABRIC_ENABLED === 'true';
 const CONNECTION_PROFILE_PATH = process.env.FABRIC_CONNECTION_PROFILE || 
@@ -49,24 +49,36 @@ async function connectGateway() {
     const ccp = JSON.parse(fs.readFileSync(CONNECTION_PROFILE_PATH, 'utf8'));
     const wallet = await Wallets.newFileSystemWallet(WALLET_PATH);
 
-    // Check if identity exists in wallet
-    const identity = await wallet.get('appUser');
+    // Check if identity exists in wallet (try admin first, fallback to appUser)
+    let identityName = 'admin';
+    let identity = await wallet.get(identityName);
+    
     if (!identity) {
-      console.warn('⚠️  Fabric identity "appUser" not found in wallet');
+      console.warn('⚠️  Fabric identity "admin" not found, trying appUser...');
+      identityName = 'appUser';
+      identity = await wallet.get(identityName);
+    }
+    
+    if (!identity) {
+      console.warn('⚠️  No Fabric identity found in wallet');
       return null;
     }
 
+    // Try with discovery disabled and explicit query handler
     gateway = new Gateway();
     await gateway.connect(ccp, {
       wallet,
-      identity: 'appUser',
-      discovery: { enabled: true, asLocalhost: true },
+      identity: identityName,
+      discovery: { enabled: false },
+      queryHandlerOptions: {
+        strategy: DefaultQueryHandlerStrategies.MSPID_SCOPE_SINGLE
+      }
     });
 
     const network = await gateway.getNetwork(CHANNEL_NAME);
     contract = network.getContract(CHAINCODE_NAME);
 
-    console.log('✅ Connected to Fabric network');
+    console.log(`✅ Connected to Fabric network as ${identityName}`);
     return contract;
   } catch (error) {
     console.error('❌ Failed to connect to Fabric network:', error.message);
@@ -303,6 +315,63 @@ async function verifyUsulanSnapshot(usulanId, calculatedHash) {
   return null;
 }
 
+// ============================================
+// COUCHDB RICH QUERY FUNCTIONS
+// ============================================
+
+/**
+ * Query kegiatan by dosen using CouchDB rich query
+ * @param {number} dosenId - Dosen user ID
+ * @returns {Array|null} Array of kegiatan records or null if Fabric unavailable
+ */
+async function queryKegiatanByDosen(dosenId) {
+  const result = await evaluateTransaction('QueryKegiatanByDosen', String(dosenId));
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
+/**
+ * Query kegiatan by status using CouchDB rich query
+ * @param {string} status - Status value (unverified/verified/rejected/revision_requested)
+ * @returns {Array|null} Array of kegiatan records or null if Fabric unavailable
+ */
+async function queryKegiatanByStatus(status) {
+  const result = await evaluateTransaction('QueryKegiatanByStatus', status);
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
+/**
+ * Query kegiatan by date range using CouchDB rich query
+ * @param {string} startDate - Start date in ISO format
+ * @param {string} endDate - End date in ISO format
+ * @returns {Array|null} Array of kegiatan records or null if Fabric unavailable
+ */
+async function queryKegiatanByDateRange(startDate, endDate) {
+  const result = await evaluateTransaction('QueryKegiatanByDateRange', startDate, endDate);
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
+/**
+ * Query usulan by hashed NIP using CouchDB rich query
+ * @param {string} hashNIP - Hashed NIP of dosen
+ * @returns {Array|null} Array of usulan records or null if Fabric unavailable
+ */
+async function queryUsulanByHashNIP(hashNIP) {
+  const result = await evaluateTransaction('QueryUsulanByHashNIP', hashNIP);
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
 module.exports = {
   isFabricEnabled,
   connectGateway,
@@ -319,4 +388,9 @@ module.exports = {
   recordUsulanSKIssued,
   getUsulanHistory,
   verifyUsulanSnapshot,
+  // CouchDB rich query functions
+  queryKegiatanByDosen,
+  queryKegiatanByStatus,
+  queryKegiatanByDateRange,
+  queryUsulanByHashNIP,
 };
