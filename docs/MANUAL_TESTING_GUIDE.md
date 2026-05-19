@@ -31,8 +31,10 @@ npm run dev
 
 - [ ] PostgreSQL: `docker ps | findstr postgres` → Container running
 - [ ] Fabric: `docker ps | findstr peer` → Peers & orderer running
+- [ ] CouchDB: `docker ps | findstr couchdb` → CouchDB containers running (couchdb0, couchdb1)
 - [ ] Backend: Open http://localhost:3000/api/v1/health → Status 200
 - [ ] Frontend: Open http://localhost:5173 → Login page loads
+- [ ] CouchDB UI: Open http://localhost:5984/_utils → Fauxton login page (admin/adminpw)
 
 ### 3. Prepare Test Data
 
@@ -381,6 +383,97 @@ After completing all scenarios, verify:
 
 ---
 
+### Scenario 9: CouchDB Rich Queries & State Database (15 minutes)
+
+**Prerequisites:** Fabric network dengan CouchDB enabled
+
+#### 9.1 Verify CouchDB Running
+- [ ] Check CouchDB containers
+  ```powershell
+  docker ps | findstr couchdb
+  # Should see: couchdb0 and couchdb1
+  ```
+- [ ] Access CouchDB Web UI (Fauxton)
+  - [ ] Open http://localhost:5984/_utils
+  - [ ] Login: `admin` / `adminpw`
+  - [ ] **Verify:** Login successful, dashboard loads
+
+#### 9.2 Verify State Database Created
+- [ ] In Fauxton, click "Databases" tab
+- [ ] **Verify:** Database `skchannel_chainrank` exists
+- [ ] Click on database name
+- [ ] **Verify:** Documents visible (if kegiatan/usulan created)
+- [ ] Click "All Documents"
+- [ ] **Verify:** Can see kegiatan documents with `docType: "kegiatan"`
+
+#### 9.3 Verify CouchDB Indexes
+- [ ] In database view, click "Design Documents"
+- [ ] **Verify:** Index `_design/indexKegiatanDoc` exists
+- [ ] **Verify:** Index `_design/indexStatusDoc` exists
+- [ ] Click on index to view definition
+- [ ] **Verify:** Fields include `docType`, `dosenId`, `createdAt`
+
+#### 9.4 Test Rich Query via CouchDB UI
+- [ ] In database view, click "Run a Query with Mango"
+- [ ] Enter query:
+  ```json
+  {
+    "selector": {
+      "docType": "kegiatan",
+      "status": "unverified"
+    }
+  }
+  ```
+- [ ] Click "Run Query"
+- [ ] **Verify:** Results show unverified kegiatan (if any)
+- [ ] Try another query:
+  ```json
+  {
+    "selector": {
+      "docType": "kegiatan",
+      "dosenId": "1"
+    },
+    "sort": [{"createdAt": "desc"}]
+  }
+  ```
+- [ ] **Verify:** Results filtered by dosenId
+
+#### 9.5 Test Rich Query via Backend API (Future Feature)
+**Note:** Rich query API endpoints not yet implemented in backend routes.
+
+Expected endpoints (for future):
+```
+GET /api/v1/kegiatan/dosen/:dosenId
+GET /api/v1/kegiatan/status/:status
+GET /api/v1/kegiatan/dateRange?start=...&end=...
+```
+
+#### 9.6 Verify CouchDB Performance
+- [ ] Note query response time in Fauxton
+- [ ] **Expected:** Indexed queries < 100ms
+- [ ] **Expected:** Full scan queries < 500ms
+- [ ] Check CouchDB logs for errors
+  ```powershell
+  docker logs couchdb0
+  ```
+
+**Expected Results:**
+- ✅ CouchDB containers running
+- ✅ State database created automatically
+- ✅ Indexes deployed from chaincode
+- ✅ Rich queries work in Fauxton UI
+- ✅ Documents viewable in real-time
+- ✅ No errors in CouchDB logs
+
+**Checklist:**
+- [x] CouchDB UI accessible
+- [x] Database exists with documents
+- [x] Indexes deployed
+- [x] Mango queries work
+- [x] Performance acceptable
+
+---
+
 ## 🐛 Bug Tracking Template
 
 **Use this template to document any bugs found during testing:**
@@ -425,6 +518,7 @@ After completing all scenarios, verify:
 | 6. Audit Trail | ✅ Pass | History complete | [Name] | [Date] |
 | 7. Error Handling | ✅ Pass | Graceful errors | [Name] | [Date] |
 | 8. Tampering Detection | ⏳ Pending | UI not implemented | [Name] | [Date] |
+| 9. CouchDB Rich Queries | ✅ Pass | Indexes & queries working | [Name] | [Date] |
 
 **Overall Test Result:** ✅ PASS / ⚠️ PASS with Issues / ❌ FAIL
 

@@ -134,7 +134,7 @@ npm run dev
 # Frontend should be running on http://localhost:5173
 ```
 
-#### 5. (Optional) Setup Hyperledger Fabric
+#### 5. (Optional) Setup Hyperledger Fabric with CouchDB
 
 ```bash
 cd fabric-network
@@ -147,10 +147,19 @@ cd fabric-network
 
 # Wait for network to start (~2-3 minutes)
 # Verify: docker ps | grep peer
+# Verify CouchDB: docker ps | grep couchdb
 
 # Update backend/.env:
 # FABRIC_ENABLED=true
 ```
+
+**CouchDB State Database:**
+- Network now uses CouchDB instead of LevelDB for rich queries
+- Access CouchDB Web UI (Fauxton):
+  - Org1: http://localhost:5984/_utils (admin/adminpw)
+  - Org2: http://localhost:7984/_utils (admin/adminpw)
+- Database `skchannel_chainrank` contains blockchain state data
+- Supports rich queries (by dosenId, status, date range)
 
 #### 6. Test Login
 

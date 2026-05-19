@@ -134,6 +134,27 @@ Harus muncul halaman login ChainRank.
 
 ## 🔧 Troubleshooting
 
+### ⚠️ Chaincode Deployment Error (Docker Build Broken Pipe)
+Jika Fabric network error dengan pesan:
+```
+Error: chaincode install failed with status: 500 - failed to invoke backing 
+implementation of 'InstallChaincode': could not build chaincode: docker build 
+failed: docker image build failed: write unix @->/var/run/docker.sock: write: 
+broken pipe
+```
+
+**Quick Fix:**
+1. Restart Docker Desktop
+2. Increase Docker resources (Settings → Resources → 6GB RAM, 4 CPUs)
+3. Jalankan `.\restart-fabric.ps1`
+
+**Detailed Troubleshooting:**
+📖 Lihat [FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md) untuk:
+- Root cause analysis
+- Solusi step-by-step
+- Alternative deployment methods (CCAAS)
+- Development workarounds
+
 ### Database Tidak Start
 ```powershell
 # Reset database
@@ -141,7 +162,7 @@ docker compose -f docker-compose.dev.yml down -v
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-### Fabric Network Error
+### Fabric Network Error (Umum)
 ```powershell
 cd fabric-network
 .\stop-network.ps1

@@ -10,9 +10,31 @@
 
 ---
 
+## ⚡ Quick Start
+
+**First time setup:**
+```powershell
+# 1. Setup Node.js in WSL (once)
+.\setup-nodejs-wsl.ps1
+
+# 2. Start all services
+.\start-all.ps1
+# Choose: 1) WSL mode (recommended)
+```
+
+**Access:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:3000
+- Swagger: http://localhost:3000/api-docs
+
+**📖 Full Reference:** [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
+
+---
+
 ## 🌟 Highlights
 
 - ✅ **Blockchain Integration:** Semua kegiatan & usulan dicatat di Hyperledger Fabric untuk immutable audit trail
+- ✅ **CouchDB State Database:** Rich queries untuk blockchain state (query by status, dosenId, date range)
 - ✅ **Document Integrity:** SHA-256 hashing untuk detect file tampering
 - ✅ **Hybrid Architecture:** Speed dari PostgreSQL + Security dari Blockchain
 - ✅ **Real-time KUM Tracking:** Progress bar monitoring akumulasi poin dosen
@@ -63,21 +85,23 @@ Project ini memiliki **2 roadmap** berbeda sesuai kebutuhan:
                                │
                                │ Fabric SDK
                                ▼
-                        ┌──────────────┐
-                        │  Hyperledger │
-                        │    Fabric    │
-                        │ (On-chain)   │
-                        └──────────────┘
+                        ┌──────────────┐         ┌──────────────────┐
+                        │  Hyperledger │◄───────►│   CouchDB x2     │
+                        │    Fabric    │  State  │  (State DB)      │
+                        │ (On-chain)   │         │  Org1 + Org2     │
+                        └──────────────┘         └──────────────────┘
                         - 2 Peers (Org1, Org2)
                         - 1 Orderer
-                        - Channel: mychannel
+                        - Channel: skchannel
                         - Chaincode: chainrank
+                        - CouchDB: Rich queries
 ```
 
 ### Data Flow
-1. **Upload Kegiatan:** Frontend → Backend → PostgreSQL (data) → Fabric (hash)
-2. **Verify:** Admin verifikasi → Status update di PostgreSQL + Fabric
+1. **Upload Kegiatan:** Frontend → Backend → PostgreSQL (data) → Fabric (hash) → CouchDB (state)
+2. **Verify:** Admin verifikasi → Status update di PostgreSQL + Fabric → CouchDB state updated
 3. **Audit Trail:** Query blockchain history → Tampilkan timeline di frontend
+4. **Rich Queries:** Query CouchDB for filtering (by status, dosenId, date range)
 
 ---
 
@@ -169,14 +193,30 @@ npm run dev
 ```bash
 cd fabric-network
 
-# Start Fabric network
+# Start Fabric network with CouchDB state database
 .\start-network.ps1   # Windows PowerShell
 # atau
 ./start-network.sh    # Linux/Mac
 
-# Deploy chaincode
-# (Sudah ter-deploy otomatis via start-network script)
+# Network includes:
+# - 2 Peers (Org1, Org2)
+# - 1 Orderer
+# - 2 CouchDB instances (for rich queries)
+# - Chaincode deployed automatically
+
+# Verify CouchDB running:
+docker ps | grep couchdb
+
+# Access CouchDB Web UI (Fauxton):
+# Org1: http://localhost:5984/_utils (admin/adminpw)
+# Org2: http://localhost:7984/_utils (admin/adminpw)
 ```
+
+**CouchDB State Database:**
+- Enables rich queries (query by status, dosenId, date range)
+- Web UI for inspecting blockchain state data
+- Database: `skchannel_chainrank`
+- Automatic index deployment from chaincode
 
 ### First Login
 
@@ -290,6 +330,20 @@ node test-api-kegiatan.js
 
 ## 🐛 Troubleshooting
 
+### ⚠️ Chaincode Deployment Error (Broken Pipe)
+**Symptoms:** Error saat `.\start-network.ps1`:
+```
+Error: docker build failed: write unix @->/var/run/docker.sock: write: broken pipe
+```
+
+**Quick Fix:** 
+1. Restart Docker Desktop
+2. Increase Docker resources (6GB RAM, 4 CPUs)
+3. Run `.\restart-fabric.ps1`
+
+📖 **Detailed Guide:** [QUICK_FIX_CHAINCODE.md](QUICK_FIX_CHAINCODE.md)  
+📖 **Full Analysis:** [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
+
 ### Database Connection Failed
 ```bash
 # Check PostgreSQL container
@@ -313,9 +367,10 @@ taskkill /PID <PID> /F
 lsof -ti:3000 | xargs kill -9
 ```
 
-### Fabric Network Issues
-- Lihat [FABRIC_ISSUES.md](FABRIC_ISSUES.md) untuk troubleshooting Fabric
-- Gunakan fallback mode: Set `FABRIC_ENABLED=false` di `.env`
+### Fabric Network Issues (General)
+- **Quick troubleshooting:** [FABRIC_ISSUES.md](FABRIC_ISSUES.md)
+- **Chaincode deployment:** [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
+- **Fallback mode:** Set `FABRIC_ENABLED=false` di `.env`
 - Backend tetap bisa jalan tanpa blockchain (database-only mode)
 
 ### Frontend Cannot Connect to Backend
@@ -372,13 +427,15 @@ UsulanKenaikanPangkatBlockchain/
 ├── docs/                 # Documentation
 │   ├── API_TESTING_GUIDE.md
 │   ├── ChainRank.postman_collection.json
+│   ├── FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md  # Troubleshooting chaincode
 │   ├── WEEK1_PROGRESS.md
 │   └── WEEK2_COMPLETION_SUMMARY.md
 │
 ├── docker-compose.dev.yml      # Docker Compose (PostgreSQL only)
 ├── plan.md                      # MVP Roadmap (1 month)
 ├── plan-full.md                 # Production Roadmap (7-8 months)
-├── FABRIC_ISSUES.md            # Fabric troubleshooting
+├── FABRIC_ISSUES.md            # Fabric troubleshooting (general)
+├── QUICK_FIX_CHAINCODE.md      # Quick fix for chaincode deployment
 └── README.md                    # This file
 ```
 
@@ -386,14 +443,24 @@ UsulanKenaikanPangkatBlockchain/
 
 ## 🔗 Useful Links
 
+### Getting Started
 - **Plan MVP:** [plan.md](plan.md)
 - **Plan Production:** [plan-full.md](plan-full.md)
-- **API Testing Guide:** [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)
-- **Week 1 Progress:** [docs/WEEK1_PROGRESS.md](docs/WEEK1_PROGRESS.md)
-- **Week 2 Summary:** [docs/WEEK2_COMPLETION_SUMMARY.md](docs/WEEK2_COMPLETION_SUMMARY.md)
 - **Database Quick Start:** [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
 - **Fabric Quick Start:** [FABRIC_QUICKSTART.md](FABRIC_QUICKSTART.md)
-- **Fabric Issues:** [FABRIC_ISSUES.md](FABRIC_ISSUES.md)
+
+### API & Testing
+- **API Testing Guide:** [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)
+- **Postman Collection:** [docs/ChainRank.postman_collection.json](docs/ChainRank.postman_collection.json)
+
+### Troubleshooting
+- **🔥 Chaincode Quick Fix:** [QUICK_FIX_CHAINCODE.md](QUICK_FIX_CHAINCODE.md) ← Start here!
+- **📖 Chaincode Deployment Issues:** [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
+- **Fabric Issues (General):** [FABRIC_ISSUES.md](FABRIC_ISSUES.md)
+
+### Progress Reports
+- **Week 1 Progress:** [docs/WEEK1_PROGRESS.md](docs/WEEK1_PROGRESS.md)
+- **Week 2 Summary:** [docs/WEEK2_COMPLETION_SUMMARY.md](docs/WEEK2_COMPLETION_SUMMARY.md)
 
 ---
 
