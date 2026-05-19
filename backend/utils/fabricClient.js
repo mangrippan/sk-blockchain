@@ -326,6 +326,33 @@ async function verifyUsulanSnapshot(usulanId, calculatedHash) {
   return null;
 }
 
+/**
+ * Get usulan record from blockchain
+ * @param {string} usulanId - UUID of usulan
+ * @returns {object|null} Usulan record or null if Fabric unavailable
+ */
+async function getUsulan(usulanId) {
+  const result = await evaluateTransaction('GetUsulan', String(usulanId));
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
+/**
+ * Verify SK document hash integrity against blockchain
+ * @param {string} usulanId - UUID of usulan
+ * @param {string} skDocumentHash - SK document hash from database to verify
+ * @returns {object|null} Verification result or null if Fabric unavailable
+ */
+async function verifySkHash(usulanId, skDocumentHash) {
+  const result = await evaluateTransaction('VerifySkHash', String(usulanId), skDocumentHash);
+  if (result) {
+    return JSON.parse(result);
+  }
+  return null;
+}
+
 // ============================================
 // COUCHDB RICH QUERY FUNCTIONS
 // ============================================
@@ -398,7 +425,9 @@ module.exports = {
   recordUsulanRejection,
   recordUsulanSKIssued,
   getUsulanHistory,
+  getUsulan,
   verifyUsulanSnapshot,
+  verifySkHash,
   // CouchDB rich query functions
   queryKegiatanByDosen,
   queryKegiatanByStatus,

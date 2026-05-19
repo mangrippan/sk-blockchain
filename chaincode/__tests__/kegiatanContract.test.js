@@ -443,6 +443,57 @@ describe('KegiatanContract', () => {
     });
   });
 
+  describe('VerifySkHash', () => {
+    beforeEach(async () => {
+      // Create and issue SK for testing
+      await contract.AjukanUsulanKenaikanPangkat(
+        ctx, 'usl-001', 'hashNIP', '250', 'Lektor', 'null', '2026-01-01T00:00:00Z'
+      );
+      await contract.ProsesUsulanKenaikanPangkat(ctx, 'usl-001', 'admin-1', '2026-01-02T00:00:00Z');
+      await contract.TerbitkanSkKenaikanPangkat(ctx, 'usl-001', 'sk-hash-original', 'admin-1', '2026-01-03T00:00:00Z');
+    });
+
+    it('should verify valid SK hash', async () => {
+      const result = await contract.VerifySkHash(ctx, 'usl-001', 'sk-hash-original');
+      const verification = JSON.parse(result);
+
+      expect(verification.isValid).toBe(true);
+      expect(verification.storedHash).toBe('sk-hash-original');
+      expect(verification.providedHash).toBe('sk-hash-original');
+      expect(verification.message).toContain('no tampering detected');
+    });
+
+    it('should detect tampered SK hash', async () => {
+      const result = await contract.VerifySkHash(ctx, 'usl-001', 'sk-hash-tampered');
+      const verification = JSON.parse(result);
+
+      expect(verification.isValid).toBe(false);
+      expect(verification.storedHash).toBe('sk-hash-original');
+      expect(verification.providedHash).toBe('sk-hash-tampered');
+      expect(verification.message).toContain('tampering detected');
+    });
+
+    it('should return false if SK not issued yet', async () => {
+      // Create new usulan without issuing SK
+      await contract.AjukanUsulanKenaikanPangkat(
+        ctx, 'usl-002', 'hashNIP2', '250', 'Lektor', 'null', '2026-01-01T00:00:00Z'
+      );
+
+      const result = await contract.VerifySkHash(ctx, 'usl-002', 'some-hash');
+      const verification = JSON.parse(result);
+
+      expect(verification.isValid).toBe(false);
+      expect(verification.storedHash).toBeNull();
+      expect(verification.message).toContain('SK has not been issued yet');
+    });
+
+    it('should throw if usulan does not exist', async () => {
+      await expect(
+        contract.VerifySkHash(ctx, 'nonexistent', 'some-hash')
+      ).rejects.toThrow('does not exist');
+    });
+  });
+
   describe('KUM Validation per Jabatan', () => {
     const testCases = [
       { jabatan: 'Asisten Ahli', minKUM: 100 },

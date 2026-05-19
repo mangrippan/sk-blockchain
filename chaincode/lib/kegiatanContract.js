@@ -465,6 +465,51 @@ class KegiatanContract extends Contract {
     });
   }
 
+  /**
+   * VerifySkHash - Verify the integrity of SK document hash against stored hash
+   * 
+   * @param {Context} ctx
+   * @param {string} usulanId - UUID of the usulan
+   * @param {string} providedHash - Hash to verify against stored skHash
+   * @returns {object} Verification result with match status
+   */
+  async VerifySkHash(ctx, usulanId, providedHash) {
+    const key = 'USULAN_' + usulanId;
+    const data = await ctx.stub.getState(key);
+    
+    if (!data || data.length === 0) {
+      throw new Error(`Usulan ${usulanId} does not exist`);
+    }
+
+    const usulan = JSON.parse(data.toString());
+    const storedHash = usulan.skHash;
+    
+    // If SK hasn't been issued yet, skHash will be null
+    if (!storedHash) {
+      return JSON.stringify({
+        usulanId: usulanId,
+        storedHash: null,
+        providedHash: providedHash,
+        isValid: false,
+        message: 'SK has not been issued yet - no hash stored on blockchain',
+        verifiedAt: new Date().toISOString(),
+      });
+    }
+
+    const isValid = storedHash === providedHash;
+
+    return JSON.stringify({
+      usulanId: usulanId,
+      storedHash: storedHash,
+      providedHash: providedHash,
+      isValid: isValid,
+      message: isValid 
+        ? 'SK document hash verified - no tampering detected' 
+        : 'WARNING: SK document hash mismatch - possible tampering detected!',
+      verifiedAt: new Date().toISOString(),
+    });
+  }
+
   // ============================================================
   // COUCHDB RICH QUERY FUNCTIONS
   // ============================================================

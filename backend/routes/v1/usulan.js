@@ -651,6 +651,186 @@ router.get('/:id/snapshot', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/usulan/:id/validate-blockchain
+ * Validate usulan blockchain integrity (SK hash + snapshot hash)
+ * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
+ */
+router.get('/:id/validate-blockchain', auth, async (req, res) => {
+  try {
+    const usulan = await Usulan.findById(req.params.id);
+    if (!usulan) {
+      return res.status(404).json({ error: 'Usulan not found' });
+    }
+
+    // Permission check
+    if (req.user.role === 'dosen' && usulan.dosen_id !== req.user.id) {
+      return res.status(403).json({ 
+        error: 'Forbidden',
+        message: 'You can only validate your own usulan' 
+      });
+    }
+
+    // Initialize validation results
+    const validationResults = {
+      valid: true,
+      checks: {
+        blockchainEnabled: false,
+        blockchainRecordExists: false,
+        skHashMatches: false,
+        snapshotHashMatches: false,
+      },
+      details: {
+        databaseStatus: usulan.status,
+        databaseSkHash: usulan.sk_document_hash,
+        databaseSnapshotHash: usulan.snapshot_hash,
+        blockchainSkHash: null,
+        blockchainSnapshotHash: null,
+        inconsistencies: [],
+      },
+      warnings: [],
+      errors: [],
+    };
+
+    // Check if blockchain is enabled
+    if (!fabricClient.isFabricEnabled()) {
+      validationResults.checks.blockchainEnabled = false;
+      validationResults.warnings.push('Blockchain integration is disabled');
+      
+      return res.json({
+        valid: true, // Valid in database-only mode
+        message: 'Blockchain validation skipped (blockchain disabled)',
+        ...validationResults,
+      });
+    }
+
+    validationResults.checks.blockchainEnabled = true;
+
+    try {
+      // 1. Check if blockchain record exists
+      const blockchainUsulan = await fabricClient.getUsulan(req.params.id);
+      
+      if (!blockchainUsulan) {
+        validationResults.valid = false;
+        validationResults.checks.blockchainRecordExists = false;
+        validationResults.errors.push('No blockchain record found for this usulan');
+      } else {
+        validationResults.checks.blockchainRecordExists = true;
+
+        // 2. Verify SK document hash (only if SK has been issued)
+        if (usulan.status === 'sk_issued' && usulan.sk_document_hash) {
+          try {
+            const skHashVerification = await fabricClient.verifySkHash(
+              req.params.id,
+              usulan.sk_document_hash
+            );
+            
+            if (skHashVerification) {
+              validationResults.checks.skHashMatches = skHashVerification.isValid;
+              validationResults.details.blockchainSkHash = skHashVerification.storedHash;
+              
+              if (!skHashVerification.isValid) {
+                validationResults.valid = false;
+                validationResults.errors.push(
+                  'SK document hash mismatch - possible tampering detected'
+                );
+                validationResults.details.inconsistencies.push({
+                  type: 'SK_HASH_MISMATCH',
+                  database: usulan.sk_document_hash,
+                  blockchain: skHashVerification.storedHash,
+                });
+              }
+            }
+          } catch (hashError) {
+            validationResults.warnings.push(
+              `SK hash verification failed: ${hashError.message}`
+            );
+          }
+        } else if (usulan.status === 'sk_issued') {
+          validationResults.warnings.push('SK issued but no SK document hash in database');
+        } else {
+          validationResults.checks.skHashMatches = null; // Not applicable yet
+          validationResults.warnings.push('SK not yet issued - skipping SK hash validation');
+        }
+
+        // 3. Verify snapshot hash (if usulan has snapshot)
+        if (usulan.snapshot_hash) {
+          try {
+            const snapshotVerification = await fabricClient.verifyUsulanSnapshot(
+              req.params.id,
+              usulan.snapshot_hash
+            );
+            
+            if (snapshotVerification) {
+              validationResults.checks.snapshotHashMatches = snapshotVerification.isValid;
+              validationResults.details.blockchainSnapshotHash = snapshotVerification.storedHash;
+              
+              if (!snapshotVerification.isValid) {
+                validationResults.valid = false;
+                validationResults.errors.push(
+                  'Snapshot hash mismatch - kegiatan data may have been tampered'
+                );
+                validationResults.details.inconsistencies.push({
+                  type: 'SNAPSHOT_HASH_MISMATCH',
+                  database: usulan.snapshot_hash,
+                  blockchain: snapshotVerification.storedHash,
+                });
+              }
+            }
+          } catch (snapshotError) {
+            validationResults.warnings.push(
+              `Snapshot hash verification failed: ${snapshotError.message}`
+            );
+          }
+        } else {
+          validationResults.checks.snapshotHashMatches = null;
+        }
+
+        // 4. Add blockchain history
+        try {
+          const blockchainHistory = await fabricClient.getUsulanHistory(req.params.id);
+          if (blockchainHistory) {
+            validationResults.details.blockchainHistory = blockchainHistory.map(h => ({
+              txId: h.txId,
+              timestamp: h.timestamp,
+              status: h.value?.status,
+              skHash: h.value?.skHash,
+            }));
+          }
+        } catch (historyError) {
+          validationResults.warnings.push(
+            `Failed to retrieve blockchain history: ${historyError.message}`
+          );
+        }
+      }
+
+    } catch (blockchainError) {
+      validationResults.valid = false;
+      validationResults.errors.push(
+        `Blockchain validation error: ${blockchainError.message}`
+      );
+    }
+
+    // Determine overall validation status
+    const statusCode = validationResults.valid ? 200 : 409; // 409 Conflict for inconsistencies
+
+    res.status(statusCode).json({
+      valid: validationResults.valid,
+      message: validationResults.valid 
+        ? 'Blockchain validation passed' 
+        : 'Blockchain validation failed - inconsistencies detected',
+      ...validationResults,
+    });
+
+  } catch (error) {
+    console.error('Blockchain validation error:', error);
+    res.status(500).json({
+      error: 'Failed to validate blockchain integrity',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/v1/usulan/:id/audit
  * Get complete audit trail: kegiatan + usulan + blockchain
  * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
@@ -755,6 +935,42 @@ router.get('/:id/audit', async (req, res) => {
       return dateA - dateB;
     });
 
+    // 8. Check integrity if blockchain is enabled and SK has been issued
+    let integrity = null;
+    if (fabricClient.isFabricEnabled() && usulan.status === 'sk_issued' && usulan.sk_document_hash) {
+      try {
+        const skHashVerification = await fabricClient.verifySkHash(
+          req.params.id,
+          usulan.sk_document_hash
+        );
+        
+        let snapshotHashVerification = null;
+        if (usulan.snapshot_hash) {
+          snapshotHashVerification = await fabricClient.verifyUsulanSnapshot(
+            req.params.id,
+            usulan.snapshot_hash
+          );
+        }
+
+        integrity = {
+          skHashValid: skHashVerification ? skHashVerification.isValid : null,
+          snapshotHashValid: snapshotHashVerification ? snapshotHashVerification.isValid : null,
+          blockchainSkHash: skHashVerification ? skHashVerification.storedHash : null,
+          databaseSkHash: usulan.sk_document_hash,
+          blockchainSnapshotHash: snapshotHashVerification ? snapshotHashVerification.storedHash : null,
+          databaseSnapshotHash: usulan.snapshot_hash,
+          message: (skHashVerification && !skHashVerification.isValid) || (snapshotHashVerification && !snapshotHashVerification.isValid)
+            ? 'WARNING: Hash mismatch detected - possible data tampering!'
+            : 'All hashes verified successfully',
+        };
+      } catch (integrityError) {
+        console.warn('Integrity check failed:', integrityError.message);
+        integrity = {
+          error: `Integrity check failed: ${integrityError.message}`,
+        };
+      }
+    }
+
     res.json({
       data: allEntries,
       summary: {
@@ -762,7 +978,8 @@ router.get('/:id/audit', async (req, res) => {
         kegiatan: kegiatanEntries.length,
         usulan: usulanEntries.length,
         blockchain: blockchainEntries.length,
-      }
+      },
+      integrity,
     });
   } catch (error) {
     console.error('Error getting audit trail:', error);
