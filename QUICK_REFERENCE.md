@@ -1,192 +1,162 @@
-# ChainRank Quick Reference
+# ChainRank - Quick Reference
 
-## 🚀 Quick Start
+## Menjalankan Project
 
-### Option 1: Full Stack (Recommended)
-```powershell
-# First time only: Setup Node.js in WSL
-.\setup-nodejs-wsl.ps1
+### Start Semua (Recommended)
 
-# Start everything
-.\start-all.ps1
-# Choose: 1) WSL mode for full Fabric integration
-```
-
-### Option 2: Database Only (No Blockchain)
 ```powershell
 .\start-all.ps1
-# Choose: 2) Windows mode (Fabric disabled)
+# Pilih opsi 1 (WSL) untuk full Fabric/blockchain integration
 ```
 
-## 🛑 Stop Services
+Script ini otomatis menjalankan:
+1. PostgreSQL Database (Docker, port 5434)
+2. Hyperledger Fabric Network (CCAAS)
+3. Backend Server (WSL, port 3000)
+4. Frontend Vue.js (port 5174)
+
+### Post-Start: Deploy Chaincode & Refresh Wallet
+
+Setelah `start-all.ps1` selesai, jalankan ini **sekali** agar blockchain berfungsi:
+
+```powershell
+# 1. Approve & commit chaincode
+wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network && bash deploy-cc.sh"
+
+# 2. Refresh wallet identity (wajib setiap network di-recreate)
+wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend && node enroll-wallet.js"
+
+# 3. Restart backend agar pakai wallet baru
+wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend && pm2 restart chainrank-backend"
+```
+
+### Stop Semua
 
 ```powershell
 .\stop-all.ps1
 ```
 
-## 🔧 Individual Services
+---
 
-### Database Only
+## Start Manual (Per Komponen)
+
+### Database
 ```powershell
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-### Fabric Network (CCAAS)
+### Fabric Network
 ```powershell
-.\restart-fabric-ccaas.ps1
+cd fabric-network
+.\start-network-ccaas.ps1
 ```
 
-### Backend (WSL Mode)
-```powershell
-.\start-backend-wsl.ps1
-```
-
-## 📋 Service URLs
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Frontend | http://localhost:5173 | - |
-| Backend API | http://localhost:3000 | - |
-| Swagger Docs | http://localhost:3000/api-docs | - |
-| CouchDB Org1 | http://localhost:5984/_utils | admin/adminpw |
-| CouchDB Org2 | http://localhost:7984/_utils | admin/adminpw |
-| PostgreSQL | localhost:5434 | postgres/postgres123 |
-
-**Default Login:**
-- Email: `admin@chainrank.test`
-- Password: `password123`
-
-## 🔍 Verification
-
-### Check All Services
-```powershell
-# Fabric containers
-docker ps --filter "name=peer\|orderer\|chainrank"
-
-# Database
-docker ps --filter "name=postgres"
-
-# Test Fabric (from WSL)
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend && node test-fabric-connection.js"
-```
-
-### Test Chaincode (CLI)
+### Backend (WSL + PM2)
 ```bash
-wsl -d Ubuntu
-cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network/fabric-samples/test-network
-
-# Load environment
-. scripts/envVar.sh && setGlobals 1
-
-# Test invoke
-peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
-  --tls --cafile $ORDERER_CA -C skchannel -n chainrank \
-  -c '{"function":"InitLedger","Args":[]}' \
-  --peerAddresses localhost:7051 --tlsRootCertFiles $PEER0_ORG1_CA
-
-# Query
-peer chaincode query -C skchannel -n chainrank -c '{"function":"GetAllKegiatan","Args":[]}'
+# Di WSL Ubuntu terminal:
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
+pm2 start server.js --name chainrank-backend
+pm2 logs chainrank-backend
 ```
 
-## 📚 Detailed Guides
-
-- **Backend WSL Setup**: [BACKEND_WSL_GUIDE.md](BACKEND_WSL_GUIDE.md)
-- **Fabric CCAAS Method**: [fabric-network/CCAAS_METHOD.md](fabric-network/CCAAS_METHOD.md)
-- **Quick Chaincode Fix**: [QUICK_FIX_CHAINCODE.md](QUICK_FIX_CHAINCODE.md)
-- **Deployment Issues**: [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
-- **Known SDK Issue**: [docs/FABRIC_SDK_KNOWN_ISSUE.md](docs/FABRIC_SDK_KNOWN_ISSUE.md)
-
-## 🐛 Troubleshooting
-
-### Fabric Network Issues
+### Frontend
 ```powershell
-# Restart Fabric with CCAAS
-.\restart-fabric-ccaas.ps1
+cd frontend
+npm run dev
 ```
-
-### Backend Can't Connect to Fabric
-**Solution**: Run backend in WSL mode
-```powershell
-.\start-backend-wsl.ps1
-```
-
-### Port Already in Use
-```powershell
-# Find process on port 3000
-Get-NetTCPConnection -LocalPort 3000 | Select OwningProcess
-
-# Kill process (replace PID)
-Stop-Process -Id <PID> -Force
-```
-
-### Database Connection Failed
-```powershell
-# Restart database
-docker compose -f docker-compose.dev.yml restart
-```
-
-## 🏗️ Architecture
-
-### WSL Mode (Full Integration)
-```
-┌─────────────────────────────────────┐
-│  Windows                            │
-│  ┌──────────┐                       │
-│  │ Frontend │ (Vue.js port 5173)    │
-│  │ Browser  │                       │
-│  └────┬─────┘                       │
-└───────┼─────────────────────────────┘
-        │ HTTP
-        ↓
-┌─────────────────────────────────────┐
-│  WSL2 (Ubuntu)                      │
-│                                     │
-│  ┌─────────┐      ┌──────────────┐ │
-│  │ Backend │━━━━━━│ Fabric       │ │
-│  │ Node.js │      │ Network      │ │
-│  │  :3000  │      │ (CCAAS)      │ │
-│  └────┬────┘      └──────────────┘ │
-│       │                             │
-│       ↓                             │
-│  ┌─────────┐                        │
-│  │PostgreSQL│ (port 5434)          │
-│  └─────────┘                        │
-└─────────────────────────────────────┘
-```
-
-## ✅ Features
-
-### Blockchain (Fabric + CCAAS)
-- ✅ Immutable audit trail
-- ✅ Document hash verification
-- ✅ Tamper-proof records
-- ✅ CouchDB rich queries
-- ✅ External chaincode containers
-
-### Backend (Node.js + Express)
-- ✅ RESTful API
-- ✅ JWT authentication
-- ✅ File upload handling
-- ✅ Hybrid storage (PostgreSQL + Blockchain)
-- ✅ Swagger documentation
-
-### Frontend (Vue.js)
-- ✅ Responsive UI
-- ✅ Role-based access
-- ✅ Document management
-- ✅ Promotion workflow
-
-## 📦 Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `start-all.ps1` | Start all services (interactive) |
-| `stop-all.ps1` | Stop all services |
-| `restart-fabric-ccaas.ps1` | Restart Fabric with CCAAS |
-| `start-backend-wsl.ps1` | Start backend in WSL |
-| `setup-nodejs-wsl.ps1` | Install Node.js in WSL (once) |
 
 ---
 
-**Last Updated**: 2026-05-19  
-**Status**: ✅ CCAAS Fixed | ✅ WSL Integration Ready
+## Service URLs
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:5174 |
+| Backend API | http://localhost:3000 |
+| Health Check | http://localhost:3000/health |
+| PostgreSQL | localhost:5434 |
+
+---
+
+## Login Credentials
+
+| Email | Password | Role |
+|-------|----------|------|
+| `admin@prima.ipb` | `admin123` | Superadmin |
+| `budi.santoso@prima.ipb` | `admin123` | Dosen |
+| `ani.wijaya@prima.ipb` | `admin123` | Dosen |
+| `ahmad.dahlan@prima.ipb` | `admin123` | Pimpinan |
+| `sdm@chainrank.test` | `admin123` | Admin SDM |
+
+---
+
+## Verifikasi Blockchain
+
+### Cek via Database
+```powershell
+docker exec chainrank_postgres_dev psql -U postgres -d chainrank_db -c "SELECT id, tx_id_fabric, status FROM sk.kegiatan_dosen ORDER BY created_at DESC LIMIT 5;"
+```
+
+Jika `tx_id_fabric` terisi → blockchain recording berhasil.
+
+### Cek via Chaincode CLI
+```bash
+# Di WSL
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network/fabric-samples/test-network
+. scripts/envVar.sh && setGlobals 1
+peer chaincode query -C skchannel -n chainrank -c '{"function":"KegiatanContract:GetAllKegiatan","Args":[]}'
+```
+
+### Test Direct (tanpa API)
+```bash
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
+node test-fabric-direct.js
+```
+
+---
+
+## Troubleshooting
+
+### Backend tidak konek ke Fabric
+```bash
+# Pastikan wallet sudah di-refresh setelah network restart:
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
+node enroll-wallet.js
+pm2 restart chainrank-backend
+```
+
+### Chaincode belum committed
+```bash
+# Jalankan deploy script:
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network
+bash deploy-cc.sh
+```
+
+### Database connection refused
+```powershell
+# Restart PostgreSQL container:
+docker compose -f docker-compose.dev.yml up -d
+```
+
+---
+
+## Arsitektur
+
+```
+┌─────────────┐     ┌──────────────┐     ┌───────────────────┐
+│  Frontend   │────▶│   Backend    │────▶│   PostgreSQL      │
+│  (Vue.js)   │     │  (Express)   │     │   (port 5434)     │
+│  port 5174  │     │  port 3000   │     └───────────────────┘
+└─────────────┘     │              │
+                    │   WSL/PM2    │────▶┌───────────────────┐
+                    └──────────────┘     │ Hyperledger Fabric │
+                                        │ peer0 (port 7051)  │
+                                        │ orderer (port 7050)│
+                                        └───────────────────┘
+```
+
+- **Channel:** skchannel
+- **Chaincode:** chainrank (KegiatanContract)
+- **Endorsement Policy:** OR('Org1MSP.peer','Org2MSP.peer')
+- **State DB:** CouchDB
+- **SDK:** fabric-network v2.2.20 (discovery disabled, static endorsement)

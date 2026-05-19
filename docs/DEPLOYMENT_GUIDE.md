@@ -84,90 +84,86 @@ git clone <repository-url>
 cd UsulanKenaikanPangkatBlockchain
 ```
 
-#### 2. Setup Database (Docker)
+#### 2. Start All Services (Recommended)
+
+```powershell
+.\start-all.ps1
+# Pilih opsi 1 (WSL) untuk full blockchain integration
+```
+
+Atau manual step-by-step:
+
+#### 3. Setup Database (Docker)
 
 ```bash
-# Start PostgreSQL container
-docker-compose -f docker-compose.dev.yml up -d
-
-# Wait for database to be ready (check logs)
-docker logs chainrank_postgres_dev
+# Start PostgreSQL container (port 5434)
+docker compose -f docker-compose.dev.yml up -d
 
 # Verify database is running
 docker exec chainrank_postgres_dev psql -U postgres -d chainrank_db -c "SELECT 'OK';"
 ```
 
-#### 3. Setup Backend
+#### 4. Setup Hyperledger Fabric (CCAAS)
 
-```bash
-cd backend
-
-# Install dependencies
-npm install
-
-# Create .env file from template
-cp .env.example .env
-
-# Edit .env - update if needed:
-# - DB_PORT=5434 (Docker PostgreSQL port)
-# - JWT_SECRET=<generate strong secret>
-# - FABRIC_ENABLED=false (for now)
-
-# Start backend
-npm start
-
-# Backend should be running on http://localhost:3000
-# Test: curl http://localhost:3000/api/v1/health
-```
-
-#### 4. Setup Frontend
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Frontend should be running on http://localhost:5173
-```
-
-#### 5. (Optional) Setup Hyperledger Fabric with CouchDB
-
-```bash
+```powershell
 cd fabric-network
-
-# Windows PowerShell:
-.\start-network.ps1
-
-# Linux/macOS:
-./start-network.sh
-
-# Wait for network to start (~2-3 minutes)
-# Verify: docker ps | grep peer
-# Verify CouchDB: docker ps | grep couchdb
-
-# Update backend/.env:
-# FABRIC_ENABLED=true
+.\start-network-ccaas.ps1
+cd ..
 ```
 
-**CouchDB State Database:**
-- Network now uses CouchDB instead of LevelDB for rich queries
-- Access CouchDB Web UI (Fauxton):
-  - Org1: http://localhost:5984/_utils (admin/adminpw)
-  - Org2: http://localhost:7984/_utils (admin/adminpw)
-- Database `skchannel_chainrank` contains blockchain state data
-- Supports rich queries (by dosenId, status, date range)
+Setelah network up, deploy chaincode:
 
-#### 6. Test Login
+```bash
+# Di WSL:
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network
+bash deploy-cc.sh
+```
 
-**Open browser:** http://localhost:5173
+#### 5. Setup Backend (WSL + PM2)
+
+```bash
+# Di WSL Ubuntu:
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
+npm install
+
+# Refresh wallet identity dari network saat ini
+node enroll-wallet.js
+
+# Start dengan PM2
+pm2 start server.js --name chainrank-backend
+
+# Backend running di http://localhost:3000
+```
+
+#### 6. Setup Frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+# Frontend running di http://localhost:5174
+```
+
+#### 7. Test Login
+
+**Open browser:** http://localhost:5174
 
 **Login credentials:**
-- Email: `budi.santoso@chainrank.test`
-- Password: `password123`
+
+| Email | Password | Role |
+|-------|----------|------|
+| `admin@prima.ipb` | `admin123` | Superadmin |
+| `budi.santoso@prima.ipb` | `admin123` | Dosen |
+| `ahmad.dahlan@prima.ipb` | `admin123` | Pimpinan |
+| `sdm@chainrank.test` | `admin123` | Admin SDM |
+
+#### 8. Verify Blockchain Recording
+
+```powershell
+docker exec chainrank_postgres_dev psql -U postgres -d chainrank_db -c "SELECT id, tx_id_fabric, status FROM sk.kegiatan_dosen ORDER BY created_at DESC LIMIT 5;"
+```
+
+Jika `tx_id_fabric` terisi → blockchain integration berhasil.
 
 ---
 
@@ -510,26 +506,47 @@ services:
 
 ## Fabric Network Setup
 
-### Development (Test Network)
+### Development (Test Network with CCAAS)
+
+```powershell
+# Start Fabric network (CCAAS method - external chaincode containers)
+cd fabric-network
+.\start-network-ccaas.ps1
+```
+
+Setelah network running, deploy chaincode:
 
 ```bash
-cd fabric-network
-
-# Start network
-./start-network.ps1  # Windows
-./start-network.sh   # Linux/macOS
-
-# Deploy chaincode
-# (Automatically deployed via start-network script)
-
-# Verify network
-docker ps | grep peer
-docker ps | grep orderer
-
-# Test chaincode
-cd ../backend
-node test-chaincode.js
+# Di WSL Ubuntu:
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network
+bash deploy-cc.sh
 ```
+
+Refresh wallet (wajib setelah network di-recreate):
+
+```bash
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
+node enroll-wallet.js
+```
+
+Verify:
+
+```bash
+# Test direct SDK connection
+node test-fabric-direct.js
+
+# Test via CLI
+cd ../fabric-network/fabric-samples/test-network
+. scripts/envVar.sh && setGlobals 1
+peer chaincode query -C skchannel -n chainrank -c '{"function":"KegiatanContract:GetAllKegiatan","Args":[]}'
+```
+
+**Network details:**
+- Channel: `skchannel`
+- Chaincode: `chainrank` (contract: KegiatanContract)
+- Endorsement: OR('Org1MSP.peer','Org2MSP.peer')
+- Connection profile: `fabric-config/connection-org1-wsl.json`
+- Wallet: `fabric-config/wallet/`
 
 ### Production (Multi-Organization)
 
@@ -580,7 +597,7 @@ node test-chaincode.js
 | `NODE_ENV` | Environment | `production` | Yes |
 | `CORS_ORIGIN` | Allowed origin | `https://domain.com` | Yes |
 | `FABRIC_ENABLED` | Enable blockchain | `true` | No |
-| `FABRIC_CHANNEL` | Fabric channel | `mychannel` | If Fabric enabled |
+| `FABRIC_CHANNEL` | Fabric channel | `skchannel` | If Fabric enabled |
 | `FABRIC_CHAINCODE` | Chaincode name | `chainrank` | If Fabric enabled |
 
 ### Frontend Environment Variables

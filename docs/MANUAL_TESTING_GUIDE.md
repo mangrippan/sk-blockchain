@@ -11,16 +11,24 @@
 ### 1. Start All Services
 
 ```powershell
+.\start-all.ps1
+# Pilih opsi 1 (WSL) untuk blockchain integration
+```
+
+Atau manual:
+
+```powershell
 # Terminal 1: Start PostgreSQL (Docker)
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
-# Terminal 2: Start Fabric Network (Optional - untuk blockchain features)
+# Terminal 2: Start Fabric Network
 cd fabric-network
-.\start-network.ps1
+.\start-network-ccaas.ps1
 
-# Terminal 3: Start Backend
-cd backend
-npm start
+# Terminal 3 (WSL): Start Backend
+cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
+node enroll-wallet.js   # refresh wallet (sekali setelah network start)
+pm2 start server.js --name chainrank-backend
 
 # Terminal 4: Start Frontend
 cd frontend
@@ -31,17 +39,17 @@ npm run dev
 
 - [ ] PostgreSQL: `docker ps | findstr postgres` → Container running
 - [ ] Fabric: `docker ps | findstr peer` → Peers & orderer running
-- [ ] CouchDB: `docker ps | findstr couchdb` → CouchDB containers running (couchdb0, couchdb1)
-- [ ] Backend: Open http://localhost:3000/api/v1/health → Status 200
-- [ ] Frontend: Open http://localhost:5173 → Login page loads
-- [ ] CouchDB UI: Open http://localhost:5984/_utils → Fauxton login page (admin/adminpw)
+- [ ] Backend: Open http://localhost:3000/health → Status 200
+- [ ] Frontend: Open http://localhost:5174 → Login page loads
+- [ ] Blockchain: `node backend/test-fabric-direct.js` → SUCCESS
 
 ### 3. Prepare Test Data
 
-**Test Accounts (already seeded):**
-- **Dosen:** `budi.santoso@chainrank.test` / `password123`
-- **Admin SDM:** `dewi.lestari@chainrank.test` / `password123`
-- **Superadmin:** `admin@chainrank.test` / `password123`
+**Test Accounts (seeded):**
+- **Dosen:** `budi.santoso@prima.ipb` / `admin123`
+- **Pimpinan:** `ahmad.dahlan@prima.ipb` / `admin123`
+- **Admin SDM:** `sdm@chainrank.test` / `admin123`
+- **Superadmin:** `admin@prima.ipb` / `admin123`
 
 **Test Files:**
 - Prepare 2-3 sample PDF files (<5MB) untuk upload testing

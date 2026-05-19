@@ -6,9 +6,9 @@ Konsolidasi progress dari Week 1 hingga completion, termasuk semua achievements,
 
 ## 📊 Overall Progress
 
-**Status**: ✅ **MVP COMPLETE**
+**Status**: ✅ **MVP COMPLETE + BLOCKCHAIN FULLY INTEGRATED**
 **Timeline**: 4 weeks (sesuai plan MVP)
-**Success Rate**: **95%** (CCAAS deployment)
+**Success Rate**: **100%** (all features working including blockchain)
 
 ---
 
@@ -261,25 +261,24 @@ chainrank_ccaas.tar.gz
 **Impact**: High - enables reliable deployment
 
 ### Challenge 2: Backend-Fabric Connectivity
-**Severity**: 🟡 Medium (feature limitation)
+**Severity**: � Critical (core feature broken)
 
 **Problem:**
-- Backend di Windows tidak bisa connect Fabric di WSL
-- SDK error: Discovery access denied
-- Transaction fails: No valid responses
+- Backend SDK mendapat "No valid responses from peers"
+- Tiga layer masalah yang saling tumpang tindih
 
-**Root Cause:**
-- Docker networking antara Windows dan WSL2
-- TLS certificate hostname mismatch
-- Port routing issues
+**Root Causes (3 issues):**
+1. Contract namespace salah: `getContract('chainrank')` seharusnya `getContract('chainrank', 'KegiatanContract')`
+2. Connection profile tidak memiliki section `channels` - SDK tidak tahu peer mana untuk endorsement (discovery disabled)
+3. Wallet identity expired - setelah network restart, wallet harus di-refresh dari crypto material baru
 
-**Solution:** ✅ Backend in WSL
-- Same network as Fabric
-- Direct connectivity
-- No networking issues
+**Solution:** ✅ Multi-layer fix
+- Fix namespace di fabricClient.js
+- Tambah `channels` + `orderers` section di connection-org1-wsl.json
+- Buat `enroll-wallet.js` script untuk refresh wallet otomatis
 
-**Time Spent**: 1 day debugging + solution
-**Impact**: Medium - enables full Fabric integration
+**Time Spent**: 2 days debugging + solution
+**Impact**: Critical - blockchain recording sekarang 100% working
 
 ### Challenge 3: CCAAS Package Format
 **Severity**: 🟡 Medium (deployment blocker)

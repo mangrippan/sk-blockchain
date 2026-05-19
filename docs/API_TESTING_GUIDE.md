@@ -404,9 +404,10 @@ When enabled:
 ### Issue 1: "Invalid credentials" on login
 
 **Solution:** Ensure you're using the correct email/password. Default seed users:
-- `test.dosen@test.com` / `Test123!` (created during testing)
-- `admin@chainrank.test` / `admin123` (seed data)
-- `sdm@chainrank.test` / `admin123` (seed data)
+- `budi.santoso@prima.ipb` / `admin123` (dosen)
+- `admin@prima.ipb` / `admin123` (superadmin)
+- `sdm@chainrank.test` / `admin123` (admin SDM)
+- `ahmad.dahlan@prima.ipb` / `admin123` (pimpinan)
 
 ### Issue 2: "Missing required fields" on register
 
