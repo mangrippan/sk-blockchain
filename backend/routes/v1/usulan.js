@@ -150,9 +150,12 @@ router.get('/:id', async (req, res) => {
  * Ajukan usulan kenaikan pangkat
  */
 router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
+  console.log('🔍 POST /usulan handler started for user:', req.user?.id);
   const client = await pool.connect();
+  console.log('✅ Database client acquired');
   try {
     await client.query('BEGIN');
+    console.log('✅ Transaction BEGIN');
     
     const {
       jabatan_tujuan_id,
@@ -213,7 +216,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     // Get all verified kegiatan that haven't been used (KUM reset logic)
     const kegiatanResult = await client.query(
       `SELECT k.id, k.poin_kum, k.file_hash, k.ref_kegiatan_id,
-              k.tx_id_fabric, k.tx_id_verify_fabric, k.verified_at
+              k.tx_id_fabric, k.verified_at
        FROM sk.kegiatan_dosen k
        WHERE k.dosen_id = $1 
          AND k.status = 'verified' 
@@ -245,17 +248,27 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       });
     }
 
-    // Create usulan
-    const usulan = await Usulan.create({
-      dosen_id: req.user.id,
-      total_poin_diajukan: totalPoin,
-      jabatan_asal: currentJabatan.jabatan_nama,
-      jabatan_tujuan: targetJabatan.nama,
-      jabatan_asal_id: currentJabatan.jabatan_id,
-      jabatan_tujuan_id: jabatan_tujuan_id,
-      periode_penilaian_mulai,
-      periode_penilaian_selesai,
-    });
+    // Create usulan (using client to stay in transaction)
+    const usulanResult = await client.query(
+      `INSERT INTO sk.usulan_kenaikan_pangkat (
+        dosen_id, total_poin_diajukan, jabatan_asal, jabatan_tujuan,
+        jabatan_asal_id, jabatan_tujuan_id,
+        periode_penilaian_mulai, periode_penilaian_selesai
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *`,
+      [
+        req.user.id,
+        totalPoin,
+        currentJabatan.jabatan_nama,
+        targetJabatan.nama,
+        currentJabatan.jabatan_id,
+        jabatan_tujuan_id,
+        periode_penilaian_mulai,
+        periode_penilaian_selesai,
+      ]
+    );
+    const usulan = usulanResult.rows[0];
 
     // If referensi_id provided (resubmission), link it
     if (referensi_id) {
@@ -279,7 +292,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
           kegiatan.file_hash,
           kegiatan.ref_kegiatan_id,
           kegiatan.tx_id_fabric,
-          kegiatan.tx_id_verify_fabric,
+          null, // tx_id_verify_fabric - not stored in kegiatan_dosen table
           'verified',
           kegiatan.verified_at,
         ]
@@ -301,22 +314,43 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       [snapshotHash, usulan.id]
     );
 
-    // Submit (draft → pending)
-    const submitted = await Usulan.submit(usulan.id);
-
-    // Record to blockchain with snapshot hash
-    const hashNIP = crypto.createHash('sha256').update(req.user.nip_nidn || '').digest('hex');
-    const txResult = await fabricClient.recordUsulanCreation(
-      usulan.id,
-      hashNIP,
-      totalPoin,
-      targetJabatan.nama,
-      referensi_id || null,
-      snapshotHash
+    // Submit (draft → pending) using client
+    const submitResult = await client.query(
+      `UPDATE sk.usulan_kenaikan_pangkat
+       SET status = 'pending'
+       WHERE id = $1 AND deleted_at IS NULL AND status = 'draft'
+       RETURNING *`,
+      [usulan.id]
     );
+    const submitted = submitResult.rows[0];
 
-    if (txResult) {
-      await Usulan.updateBlockchainTx(usulan.id, txResult);
+    // Record to blockchain with snapshot hash (non-blocking)
+    let txResult = null;
+    try {
+      const hashNIP = crypto.createHash('sha256').update(req.user.nip_nidn || '').digest('hex');
+      txResult = await Promise.race([
+        fabricClient.recordUsulanCreation(
+          usulan.id,
+          hashNIP,
+          totalPoin,
+          targetJabatan.nama,
+          referensi_id || null,
+          snapshotHash
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Blockchain timeout')), 5000)
+        )
+      ]);
+
+      if (txResult) {
+        await client.query(
+          `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+          [txResult, usulan.id]
+        );
+      }
+    } catch (blockchainError) {
+      console.warn('⚠️  Blockchain recording failed, continuing without it:', blockchainError.message);
+      // Continue without blockchain - usulan still created in database
     }
 
     // Audit log
@@ -324,7 +358,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'CREATE', 'usulan_kenaikan_pangkat', usulan.id, JSON.stringify({
-        jabatan_tujuan, 
+        jabatan_tujuan: targetJabatan.nama,
+        jabatan_tujuan_id: jabatan_tujuan_id,
         total_poin: totalPoin, 
         kegiatan_count: kegiatanList.length,
         snapshot_hash: snapshotHash,

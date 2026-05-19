@@ -464,6 +464,106 @@ class KegiatanContract extends Contract {
       verifiedAt: new Date().toISOString(),
     });
   }
+
+  // ============================================================
+  // COUCHDB RICH QUERY FUNCTIONS
+  // ============================================================
+
+  /**
+   * QueryKegiatanByDosen - Query kegiatan berdasarkan dosenId menggunakan CouchDB rich query
+   * 
+   * @param {Context} ctx - Transaction context
+   * @param {string} dosenId - ID of the dosen
+   * @returns {string} JSON array of kegiatan records
+   */
+  async QueryKegiatanByDosen(ctx, dosenId) {
+    const queryString = {
+      selector: {
+        docType: 'kegiatan',
+        dosenId: dosenId
+      },
+      sort: [{ createdAt: 'desc' }]
+    };
+    return await this.getQueryResultForQueryString(ctx, JSON.stringify(queryString));
+  }
+
+  /**
+   * QueryKegiatanByStatus - Query kegiatan berdasarkan status
+   * 
+   * @param {Context} ctx - Transaction context
+   * @param {string} status - Status of the kegiatan (unverified/verified/rejected/revision_requested)
+   * @returns {string} JSON array of kegiatan records
+   */
+  async QueryKegiatanByStatus(ctx, status) {
+    const queryString = {
+      selector: {
+        docType: 'kegiatan',
+        status: status
+      }
+    };
+    return await this.getQueryResultForQueryString(ctx, JSON.stringify(queryString));
+  }
+
+  /**
+   * QueryKegiatanByDateRange - Query kegiatan berdasarkan rentang tanggal
+   * 
+   * @param {Context} ctx - Transaction context
+   * @param {string} startDate - Start date in ISO format
+   * @param {string} endDate - End date in ISO format
+   * @returns {string} JSON array of kegiatan records
+   */
+  async QueryKegiatanByDateRange(ctx, startDate, endDate) {
+    const queryString = {
+      selector: {
+        docType: 'kegiatan',
+        createdAt: {
+          $gte: startDate,
+          $lte: endDate
+        }
+      }
+    };
+    return await this.getQueryResultForQueryString(ctx, JSON.stringify(queryString));
+  }
+
+  /**
+   * QueryUsulanByHashNIP - Query usulan berdasarkan hashed NIP
+   * 
+   * @param {Context} ctx - Transaction context
+   * @param {string} hashNIP - Hashed NIP of the dosen
+   * @returns {string} JSON array of usulan records
+   */
+  async QueryUsulanByHashNIP(ctx, hashNIP) {
+    const queryString = {
+      selector: {
+        docType: 'usulan',
+        hashNIP: hashNIP
+      },
+      sort: [{ createdAt: 'desc' }]
+    };
+    return await this.getQueryResultForQueryString(ctx, JSON.stringify(queryString));
+  }
+
+  /**
+   * getQueryResultForQueryString - Helper function to execute CouchDB rich query
+   * 
+   * @param {Context} ctx - Transaction context
+   * @param {string} queryString - JSON query string for CouchDB
+   * @returns {string} JSON array of results
+   */
+  async getQueryResultForQueryString(ctx, queryString) {
+    const resultsIterator = await ctx.stub.getQueryResult(queryString);
+    const results = [];
+    
+    let result = await resultsIterator.next();
+    while (!result.done) {
+      const record = JSON.parse(result.value.value.toString('utf8'));
+      results.push({ Key: result.value.key, Record: record });
+      result = await resultsIterator.next();
+    }
+    
+    await resultsIterator.close();
+    return JSON.stringify(results);
+  }
 }
 
 module.exports = KegiatanContract;
