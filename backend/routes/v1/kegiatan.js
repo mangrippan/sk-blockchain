@@ -458,6 +458,9 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
             [txId, kegiatan.id]
           );
           kegiatan.tx_id_fabric = txId;
+          console.log(`✅ Blockchain recorded for kegiatan ${kegiatan.id}: txId=${txId}`);
+        } else {
+          console.warn(`⚠️  Blockchain recording returned null for kegiatan ${kegiatan.id}`);
         }
       } catch (fabricErr) {
         console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);

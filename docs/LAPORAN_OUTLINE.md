@@ -361,7 +361,7 @@ Documented in Swagger UI: http://localhost:3000/api-docs
 - Seed data untuk reference tables
 
 #### 4.2.2 Connection Setup
-- PostgreSQL Docker container (port 5433)
+- PostgreSQL Docker container (port 5434)
 - Connection pooling dengan pg
 - Search path: sk, public
 

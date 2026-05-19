@@ -177,14 +177,17 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       [req.user.id]
     );
 
-    const currentJabatan = userResult.rows[0];
+    let currentJabatan = userResult.rows[0];
     
+    // Default to jabatan_id = 1 (Tenaga Pengajar) if not assigned
+    // This default is only used temporarily for validation and usulan creation
+    // It does NOT update the database
     if (!currentJabatan.jabatan_id) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        error: 'No current jabatan assigned',
-        message: 'Please contact admin to set your jabatan before submitting usulan'
-      });
+      const defaultJabatanResult = await client.query(
+        `SELECT id as jabatan_id, nama as jabatan_nama, tingkat
+         FROM sk.ref_jabatan_akademik WHERE id = 1`
+      );
+      currentJabatan = defaultJabatanResult.rows[0];
     }
 
     // Validate jabatan using database function

@@ -64,21 +64,21 @@ async function connectGateway() {
       return null;
     }
 
-    // Try with discovery disabled and explicit query handler
+    // Connect with discovery disabled and asLocalhost for Windows development
     gateway = new Gateway();
     await gateway.connect(ccp, {
       wallet,
       identity: identityName,
-      discovery: { enabled: false },
-      queryHandlerOptions: {
-        strategy: DefaultQueryHandlerStrategies.MSPID_SCOPE_SINGLE
+      discovery: { 
+        enabled: false,
+        asLocalhost: true
       }
     });
 
     const network = await gateway.getNetwork(CHANNEL_NAME);
-    contract = network.getContract(CHAINCODE_NAME);
+    contract = network.getContract(CHAINCODE_NAME, 'KegiatanContract');
 
-    console.log(`✅ Connected to Fabric network as ${identityName}`);
+    console.log(`✅ Connected to Fabric network as ${identityName} (contract: KegiatanContract)`);
     return contract;
   } catch (error) {
     console.error('❌ Failed to connect to Fabric network:', error.message);
@@ -116,6 +116,17 @@ async function submitTransaction(functionName, ...args) {
     return { txId, result: result.toString() };
   } catch (error) {
     console.error(`❌ Fabric submitTransaction(${functionName}) failed:`, error.message);
+    // Log detailed peer responses for debugging
+    if (error.responses) {
+      error.responses.forEach((resp, i) => {
+        console.error(`   Peer ${i} response:`, resp.response ? `status=${resp.response.status} message=${resp.response.message}` : resp);
+      });
+    }
+    if (error.errors) {
+      error.errors.forEach((err, i) => {
+        console.error(`   Error ${i}:`, err.message || err);
+      });
+    }
     return null;
   }
 }

@@ -155,7 +155,7 @@ cd UsulanKenaikanPangkatBlockchain
 # Using Docker (Recommended)
 docker-compose -f docker-compose.dev.yml up -d
 
-# Database akan running di port 5433
+# Database akan running di port 5434
 # Credentials: postgres/postgres123
 # Database: chainrank_db
 ```

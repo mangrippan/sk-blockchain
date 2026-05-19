@@ -50,7 +50,7 @@ docker compose -f docker-compose.dev.yml up -d
 | Swagger Docs | http://localhost:3000/api-docs | - |
 | CouchDB Org1 | http://localhost:5984/_utils | admin/adminpw |
 | CouchDB Org2 | http://localhost:7984/_utils | admin/adminpw |
-| PostgreSQL | localhost:5433 | postgres/postgres123 |
+| PostgreSQL | localhost:5434 | postgres/postgres123 |
 
 **Default Login:**
 - Email: `admin@chainrank.test`
@@ -149,7 +149,7 @@ docker compose -f docker-compose.dev.yml restart
 │       │                             │
 │       ↓                             │
 │  ┌─────────┐                        │
-│  │PostgreSQL│ (port 5433)          │
+│  │PostgreSQL│ (port 5434)          │
 │  └─────────┘                        │
 └─────────────────────────────────────┘
 ```

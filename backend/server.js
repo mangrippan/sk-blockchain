@@ -247,6 +247,30 @@ async function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+// ============================================
+// ERROR HANDLERS (PREVENT SILENT EXIT)
+// ============================================
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED PROMISE REJECTION:', reason);
+  console.error('   Promise:', promise);
+  console.error('   Stack:', reason.stack || 'No stack trace');
+  
+  // Don't exit immediately, log the error but keep server running
+  console.error('⚠️  Server will continue running, but this should be fixed!');
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', error);
+  console.error('   Stack:', error.stack);
+  
+  // For uncaught exceptions, we should exit gracefully
+  console.error('🛑 Server will shut down due to uncaught exception');
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
 // Start the server only if this file is run directly (not required as a module)
 if (require.main === module) {
   startServer();

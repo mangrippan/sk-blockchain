@@ -165,7 +165,7 @@ Backend `.env` for WSL mode:
 ```env
 # Database (Docker container accessible from WSL)
 DB_HOST=localhost
-DB_PORT=5433
+DB_PORT=5434
 
 # Fabric (WSL mode - all working!)
 FABRIC_ENABLED=true

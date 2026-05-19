@@ -502,5 +502,5 @@ $ node test-all-endpoints.js
 **Last Updated:** May 17, 2026  
 **Tested By:** Automated test suite  
 **Backend Version:** 1.0.0  
-**Database:** PostgreSQL (port 5433)  
+**Database:** PostgreSQL (port 5434)  
 **Blockchain:** Fallback mode (see FABRIC_ISSUES.md)

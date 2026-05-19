@@ -11,7 +11,7 @@ Write-Host "[SETUP] Setting up PostgreSQL database..." -ForegroundColor Cyan
 $PG_BIN = "C:\Program Files\PostgreSQL\15\bin"
 $env:PATH = "$PG_BIN;$env:PATH"
 $env:PGPASSWORD = $Password
-$PG_PORT = "5433"
+$PG_PORT = "5434"
 
 # Wait and test connection
 Write-Host "[TEST] Testing PostgreSQL connection..." -ForegroundColor Cyan

@@ -109,7 +109,7 @@ npm install
 cp .env.example .env
 
 # Edit .env - update if needed:
-# - DB_PORT=5433 (Docker PostgreSQL port)
+# - DB_PORT=5434 (Docker PostgreSQL port)
 # - JWT_SECRET=<generate strong secret>
 # - FABRIC_ENABLED=false (for now)
 
@@ -474,7 +474,7 @@ docker-compose up -d --build
 # Access services
 # - Frontend: http://localhost:8080
 # - Backend: http://localhost:3000
-# - PostgreSQL: localhost:5433
+# - PostgreSQL: localhost:5434
 ```
 
 ### Customizing docker-compose.yml
@@ -803,11 +803,11 @@ sudo systemctl status postgresql
 cat backend/.env | grep DB_
 
 # Test connection manually
-psql -h localhost -p 5433 -U postgres -d chainrank_db
+psql -h localhost -p 5434 -U postgres -d chainrank_db
 
 # Check firewall
 sudo ufw status
-sudo ufw allow 5433/tcp  # If using Docker
+sudo ufw allow 5434/tcp  # If using Docker
 ```
 
 ### Frontend Cannot Reach Backend

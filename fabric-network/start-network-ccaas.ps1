@@ -217,7 +217,7 @@ Write-Host ""
 # Approve chaincode for Org1
 Write-Host "Approving chaincode for Org1..." -ForegroundColor Yellow
 
-wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 1 && peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1"
+wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`\$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 1 && peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`\$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1 --signature-policy \\\"OR('Org1MSP.peer','Org2MSP.peer')\\\""
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to approve chaincode for Org1" -ForegroundColor Red
@@ -230,7 +230,7 @@ Write-Host ""
 # Approve chaincode for Org2
 Write-Host "Approving chaincode for Org2..." -ForegroundColor Yellow
 
-wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 2 && peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1"
+wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`\$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 2 && peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`\$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1 --signature-policy \\\"OR('Org1MSP.peer','Org2MSP.peer')\\\""
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to approve chaincode for Org2" -ForegroundColor Red
@@ -243,7 +243,7 @@ Write-Host ""
 # Commit chaincode definition
 Write-Host "Committing chaincode definition..." -ForegroundColor Yellow
 
-wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 1 && peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --sequence 1 --peerAddresses localhost:7051 --tlsRootCertFiles \`$PEER0_ORG1_CA --peerAddresses localhost:9051 --tlsRootCertFiles \`$PEER0_ORG2_CA"
+wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`\$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 1 && peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`\$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --sequence 1 --signature-policy \\\"OR('Org1MSP.peer','Org2MSP.peer')\\\" --peerAddresses localhost:7051 --tlsRootCertFiles \`\$PEER0_ORG1_CA --peerAddresses localhost:9051 --tlsRootCertFiles \`\$PEER0_ORG2_CA"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to commit chaincode" -ForegroundColor Red

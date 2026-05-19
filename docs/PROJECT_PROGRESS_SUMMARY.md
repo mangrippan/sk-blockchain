@@ -17,7 +17,7 @@ Konsolidasi progress dari Week 1 hingga completion, termasuk semua achievements,
 ### ✅ Completed
 
 **Database Setup:**
-- ✅ PostgreSQL 15 container running (port 5433)
+- ✅ PostgreSQL 15 container running (port 5434)
 - ✅ Schema hybrid design (15+ tables)
 - ✅ Seed data untuk reference tables
 - ✅ Migration scripts prepared
