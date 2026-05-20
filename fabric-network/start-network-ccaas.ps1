@@ -217,41 +217,47 @@ Write-Host ""
 # Approve chaincode for Org1
 Write-Host "Approving chaincode for Org1..." -ForegroundColor Yellow
 
-wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`\$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 1 && peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`\$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1 --signature-policy \\\"OR('Org1MSP.peer','Org2MSP.peer')\\\""
+# Write a temp shell script to avoid PowerShell-to-WSL quoting issues with signature-policy
+$approveScript = @"
+#!/bin/bash
+export PATH='$wslScriptDir/fabric-samples/bin':`$PATH
+export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config'
+cd '$wslTestNetworkDir'
+source scripts/envVar.sh
+
+echo "Approving for Org1..."
+setGlobals 1
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile `$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1 --signature-policy "OR('Org1MSP.peer','Org2MSP.peer')"
+if [ `$? -ne 0 ]; then echo "FAILED: Org1 approve"; exit 1; fi
+
+echo "Approving for Org2..."
+setGlobals 2
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile `$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1 --signature-policy "OR('Org1MSP.peer','Org2MSP.peer')"
+if [ `$? -ne 0 ]; then echo "FAILED: Org2 approve"; exit 1; fi
+
+echo "Committing chaincode..."
+setGlobals 1
+peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile `$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --sequence 1 --signature-policy "OR('Org1MSP.peer','Org2MSP.peer')" --peerAddresses localhost:7051 --tlsRootCertFiles `$PEER0_ORG1_CA --peerAddresses localhost:9051 --tlsRootCertFiles `$PEER0_ORG2_CA
+if [ `$? -ne 0 ]; then echo "FAILED: commit"; exit 1; fi
+
+echo "SUCCESS: Chaincode approved and committed!"
+"@
+
+$tempScriptPath = Join-Path $PSScriptRoot "temp-approve-commit-auto.sh"
+$approveScript | Set-Content -Path $tempScriptPath -NoNewline
+$wslTempScript = $tempScriptPath -replace '\\','/' -replace '^([A-Za-z]):','/mnt/$1'.ToLower()
+$wslTempScript = $wslTempScript -replace '/mnt/([A-Z])', { '/mnt/' + $_.Groups[1].Value.ToLower() }
+
+wsl -d Ubuntu -- bash -c "chmod +x '$wslTempScript' && '$wslTempScript'"
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to approve chaincode for Org1" -ForegroundColor Red
+    Write-Host "Failed to approve/commit chaincode" -ForegroundColor Red
+    Remove-Item $tempScriptPath -ErrorAction SilentlyContinue
     exit 1
 }
 
-Write-Host "Chaincode approved for Org1" -ForegroundColor Green
-Write-Host ""
-
-# Approve chaincode for Org2
-Write-Host "Approving chaincode for Org2..." -ForegroundColor Yellow
-
-wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`\$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 2 && peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`\$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --package-id $packageId --sequence 1 --signature-policy \\\"OR('Org1MSP.peer','Org2MSP.peer')\\\""
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to approve chaincode for Org2" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "Chaincode approved for Org2" -ForegroundColor Green
-Write-Host ""
-
-# Commit chaincode definition
-Write-Host "Committing chaincode definition..." -ForegroundColor Yellow
-
-wsl -d Ubuntu -- bash -c "export PATH='$wslScriptDir/fabric-samples/bin':\`\$PATH && export FABRIC_CFG_PATH='$wslScriptDir/fabric-samples/config' && cd '$wslTestNetworkDir' && . scripts/envVar.sh && setGlobals 1 && peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile \`\$ORDERER_CA --channelID $CHANNEL_NAME --name $CHAINCODE_NAME --version $CHAINCODE_VERSION --sequence 1 --signature-policy \\\"OR('Org1MSP.peer','Org2MSP.peer')\\\" --peerAddresses localhost:7051 --tlsRootCertFiles \`\$PEER0_ORG1_CA --peerAddresses localhost:9051 --tlsRootCertFiles \`\$PEER0_ORG2_CA"
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to commit chaincode" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host ""
-Write-Host "Chaincode committed successfully!" -ForegroundColor Green
+Remove-Item $tempScriptPath -ErrorAction SilentlyContinue
+Write-Host "Chaincode approved and committed successfully!" -ForegroundColor Green
 Write-Host ""
 
 # Copy connection profile
