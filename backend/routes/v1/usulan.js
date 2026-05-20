@@ -56,8 +56,36 @@ router.use(auth);
  */
 
 /**
- * GET /api/v1/usulan
- * List usulan - filtered by role
+ * @swagger
+ * /api/v1/usulan:
+ *   get:
+ *     summary: List usulan kenaikan pangkat
+ *     description: Retrieve list of usulan (filtered by user role)
+ *     tags: [Usulan]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, diproses, ditolak, sk_issued]
+ *         description: Filter by status
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Results per page
+ *     responses:
+ *       200:
+ *         description: List of usulan
+ *       500:
+ *         description: Failed to list usulan
  */
 router.get('/', async (req, res) => {
   try {
@@ -127,9 +155,28 @@ router.get('/', async (req, res) => {
 // ==========================================
 
 /**
- * GET /api/v1/usulan/:id/snapshot
- * Get kegiatan snapshot for this usulan
- * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
+ * @swagger
+ * /api/v1/usulan/{id}/snapshot:
+ *   get:
+ *     summary: Get kegiatan snapshot for usulan
+ *     description: Retrieve the immutable kegiatan snapshot stored in blockchain
+ *     tags: [Usulan]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: Kegiatan snapshot data
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan or snapshot not found
+ *       500:
+ *         description: Failed to get snapshot
  */
 router.get('/:id/snapshot', async (req, res) => {
   try {
@@ -189,11 +236,32 @@ router.get('/:id/snapshot', async (req, res) => {
 });
 
 /**
- * GET /api/v1/usulan/:id/validate-blockchain
- * Validate usulan blockchain integrity (SK hash + snapshot hash)
- * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
+ * @swagger
+ * /api/v1/usulan/{id}/validate-blockchain:
+ *   get:
+ *     summary: Validate blockchain integrity
+ *     description: Verify SK document hash and snapshot hash against blockchain records
+ *     tags: [Usulan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: Validation result with integrity checks
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Validation failed
  */
-router.get('/:id/validate-blockchain', auth, async (req, res) => {
+router.get('/:id/validate-blockchain', async (req, res) => {
   try {
     const usulan = await Usulan.findById(req.params.id);
     if (!usulan) {
@@ -369,9 +437,28 @@ router.get('/:id/validate-blockchain', auth, async (req, res) => {
 });
 
 /**
- * GET /api/v1/usulan/:id/audit
- * Get complete audit trail: kegiatan + usulan + blockchain
- * Access: Dosen (own only), Admin, Pimpinan, Superadmin, Auditor (all)
+ * @swagger
+ * /api/v1/usulan/{id}/audit:
+ *   get:
+ *     summary: Get complete audit trail
+ *     description: Retrieve audit trail including kegiatan history, usulan workflow, and blockchain records
+ *     tags: [Usulan]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: Complete audit trail with integrity status
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to get audit trail
  */
 router.get('/:id/audit', async (req, res) => {
   try {
@@ -530,8 +617,26 @@ router.get('/:id/audit', async (req, res) => {
 // ==========================================
 
 /**
- * GET /api/v1/usulan/:id
- * Detail usulan
+ * @swagger
+ * /api/v1/usulan/{id}:
+ *   get:
+ *     summary: Get usulan detail
+ *     description: Retrieve detailed information about a specific usulan
+ *     tags: [Usulan]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: Usulan detail
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to get usulan
  */
 router.get('/:id', async (req, res) => {
   try {
@@ -553,8 +658,39 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * POST /api/v1/usulan
- * Ajukan usulan kenaikan pangkat
+ * @swagger
+ * /api/v1/usulan:
+ *   post:
+ *     summary: Submit usulan kenaikan pangkat
+ *     description: Create new usulan and record snapshot hash to blockchain
+ *     tags: [Usulan]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - jabatan_tujuan_id
+ *               - kegiatan_ids
+ *             properties:
+ *               jabatan_tujuan_id:
+ *                 type: integer
+ *               kegiatan_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *     responses:
+ *       201:
+ *         description: Usulan created successfully
+ *       400:
+ *         description: Validation error
+ *       403:
+ *         description: Access denied
+ *       500:
+ *         description: Failed to create usulan
  */
 router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
   console.log('🔍 POST /usulan handler started for user:', req.user?.id);
@@ -797,8 +933,32 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
 });
 
 /**
- * PUT /api/v1/usulan/:id/proses
- * Admin: Process usulan (pending → diproses)
+ * @swagger
+ * /api/v1/usulan/{id}/proses:
+ *   put:
+ *     summary: Process usulan
+ *     description: Change usulan status from pending to diproses (Admin only)
+ *     tags: [Usulan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: Usulan processed successfully
+ *       400:
+ *         description: Invalid status transition
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to process usulan
  */
 router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), async (req, res) => {
   try {
@@ -830,8 +990,43 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
 });
 
 /**
- * PUT /api/v1/usulan/:id/tolak
- * Admin: Reject usulan
+ * @swagger
+ * /api/v1/usulan/{id}/tolak:
+ *   put:
+ *     summary: Reject usulan
+ *     description: Reject usulan with reason (Admin only)
+ *     tags: [Usulan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - catatan_penolakan
+ *             properties:
+ *               catatan_penolakan:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Usulan rejected successfully
+ *       400:
+ *         description: Invalid status or missing reason
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to reject usulan
  */
 router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), async (req, res) => {
   try {
@@ -870,9 +1065,50 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
 });
 
 /**
- * PUT /api/v1/usulan/:id/terbitkan-sk
- * Admin: Issue SK (diproses → sk_issued) with SK document upload
- * Also updates user's jabatan and locks kegiatan used in the usulan
+ * @swagger
+ * /api/v1/usulan/{id}/terbitkan-sk:
+ *   put:
+ *     summary: Issue SK document
+ *     description: Issue SK, upload document, record hash to blockchain, update user jabatan, and lock kegiatan (Admin only)
+ *     tags: [Usulan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sk_document
+ *               - sk_nomor
+ *             properties:
+ *               sk_document:
+ *                 type: string
+ *                 format: binary
+ *               sk_nomor:
+ *                 type: string
+ *               sk_tanggal:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: SK issued successfully with blockchain record
+ *       400:
+ *         description: Invalid status or missing document
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to issue SK
  */
 router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), upload.single('sk_document'), async (req, res) => {
   const client = await pool.connect();
