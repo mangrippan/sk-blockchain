@@ -14,6 +14,8 @@ const { auth, checkRole } = require('../../middleware/auth');
 const { hashFile: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
 const Usulan = require('../../models/Usulan');
+const { sanitizePagination, getPaginationMeta } = require('../../utils/pagination');
+const { validateUploadedFile } = require('../../middleware/fileValidation');
 
 // Configure multer for SK document upload
 const storage = multer.diskStorage({
@@ -89,8 +91,8 @@ router.use(auth);
  */
 router.get('/', async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { status } = req.query;
+    const { limit, offset, page } = sanitizePagination(req.query);
 
     let conditions = ['u.deleted_at IS NULL'];
     const values = [];
@@ -137,12 +139,7 @@ router.get('/', async (req, res) => {
 
     res.json({
       data: dataResult.rows,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
+      pagination: getPaginationMeta(total, limit, page),
     });
   } catch (error) {
     console.error('Error listing usulan:', error);
@@ -1110,7 +1107,7 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
  *       500:
  *         description: Failed to issue SK
  */
-router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), upload.single('sk_document'), async (req, res) => {
+router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), upload.single('sk_document'), validateUploadedFile, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

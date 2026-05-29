@@ -15,6 +15,44 @@ class KegiatanContract extends Contract {
   }
 
   /**
+   * _checkRole - Helper to validate caller's role from client identity
+   * Reads the 'role' attribute from the certificate
+   * @param {Context} ctx - Transaction context
+   * @param {Array<string>} allowedRoles - Array of allowed role names
+   * @throws Error if role is not in allowed list
+   */
+  _checkRole(ctx, allowedRoles) {
+    try {
+      // Get role attribute from client identity certificate
+      const role = ctx.clientIdentity.getAttributeValue('role');
+      
+      if (!role) {
+        throw new Error('No role attribute found in client identity certificate');
+      }
+
+      if (!allowedRoles.includes(role)) {
+        throw new Error(`Access denied. Required role: ${allowedRoles.join(' or ')}. Current role: ${role}`);
+      }
+
+      return role;
+    } catch (error) {
+      // If getAttributeValue fails, check if it's an admin identity by MSP ID
+      const mspId = ctx.clientIdentity.getMSPID();
+      
+      // Allow Org1MSP admin for backward compatibility during migration
+      if (mspId === 'Org1MSP') {
+        const idString = ctx.clientIdentity.getIDBytes().toString();
+        if (idString.includes('admin')) {
+          console.warn('Warning: Using MSP-based authorization (legacy). Please add role attribute to certificates.');
+          return 'superadmin';
+        }
+      }
+      
+      throw new Error(`Authorization failed: ${error.message}`);
+    }
+  }
+
+  /**
    * InitLedger - Initialize the ledger with sample data (optional)
    */
   async InitLedger(ctx) {
@@ -96,6 +134,9 @@ class KegiatanContract extends Contract {
    * @param {string} timestamp - ISO timestamp of verification
    */
   async VerifyKegiatan(ctx, kegiatanId, newStatus, verifiedBy, timestamp) {
+    // Access control: only admin_sdm, pimpinan, or superadmin can verify
+    this._checkRole(ctx, ['admin_sdm', 'pimpinan', 'superadmin']);
+
     const kegiatanJSON = await ctx.stub.getState(kegiatanId);
     if (!kegiatanJSON || kegiatanJSON.length === 0) {
       throw new Error(`Kegiatan ${kegiatanId} does not exist`);
@@ -213,6 +254,9 @@ class KegiatanContract extends Contract {
    * Uses range query with empty start/end keys
    */
   async GetAllKegiatan(ctx) {
+    // Access control: only admin_sdm, pimpinan, or superadmin can view all
+    this._checkRole(ctx, ['admin_sdm', 'pimpinan', 'superadmin']);
+
     const iterator = await ctx.stub.getStateByRange('', '');
     const results = [];
 
@@ -322,6 +366,9 @@ class KegiatanContract extends Contract {
    * ProsesUsulanKenaikanPangkat - Change status from Pending → Diproses
    */
   async ProsesUsulanKenaikanPangkat(ctx, usulanId, processedBy, timestamp) {
+    // Access control: only admin_sdm, pimpinan, or superadmin can process
+    this._checkRole(ctx, ['admin_sdm', 'pimpinan', 'superadmin']);
+
     const key = 'USULAN_' + usulanId;
     const data = await ctx.stub.getState(key);
     if (!data || data.length === 0) {
@@ -353,6 +400,9 @@ class KegiatanContract extends Contract {
    * TolakUsulanKenaikanPangkat - Reject an usulan
    */
   async TolakUsulanKenaikanPangkat(ctx, usulanId, processedBy, catatanPenolakan, timestamp) {
+    // Access control: only admin_sdm, pimpinan, or superadmin can reject
+    this._checkRole(ctx, ['admin_sdm', 'pimpinan', 'superadmin']);
+
     const key = 'USULAN_' + usulanId;
     const data = await ctx.stub.getState(key);
     if (!data || data.length === 0) {
@@ -385,6 +435,9 @@ class KegiatanContract extends Contract {
    * TerbitkanSkKenaikanPangkat - Issue SK and lock hash on blockchain
    */
   async TerbitkanSkKenaikanPangkat(ctx, usulanId, skHash, processedBy, timestamp) {
+    // Access control: only admin_sdm, pimpinan, or superadmin can issue SK
+    this._checkRole(ctx, ['admin_sdm', 'pimpinan', 'superadmin']);
+
     const key = 'USULAN_' + usulanId;
     const data = await ctx.stub.getState(key);
     if (!data || data.length === 0) {

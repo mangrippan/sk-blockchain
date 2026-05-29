@@ -52,15 +52,17 @@ Mendaftarkan identitas `admin` dan `appUser` ke wallet (`fabric-config/wallet/`)
 
 ### 3. Start PostgreSQL (Jika Belum Running)
 
+**Jika container sudah ada** (biasanya setelah pernah dibuat):
 ```powershell
 docker start chainrank_postgres_dev
 ```
 
-Atau jika belum pernah dibuat:
+**Jika pertama kali / belum pernah dibuat**:
 ```powershell
-cd backend
-.\setup-db.ps1
+docker-compose -f docker-compose.dev.yml up -d postgres
 ```
+
+> Database otomatis ter-initialize dengan schema & seed data dari `database/`
 
 ### 4. Start Backend
 

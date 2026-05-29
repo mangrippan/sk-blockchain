@@ -46,6 +46,9 @@ uploads/*
 fabric-samples/
 **/wallet/*
 **/connection-profile/*
+# Fabric identity wallet files (contains private keys)
+fabric-config/wallet/*.id
+fabric-config/wallet/*.json
 
 # Testing
 coverage/

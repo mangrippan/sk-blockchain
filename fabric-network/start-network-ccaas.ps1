@@ -244,11 +244,12 @@ echo "SUCCESS: Chaincode approved and committed!"
 "@
 
 $tempScriptPath = Join-Path $PSScriptRoot "temp-approve-commit-auto.sh"
-$approveScript | Set-Content -Path $tempScriptPath -NoNewline
-$wslTempScript = $tempScriptPath -replace '\\','/' -replace '^([A-Za-z]):','/mnt/$1'.ToLower()
-$wslTempScript = $wslTempScript -replace '/mnt/([A-Z])', { '/mnt/' + $_.Groups[1].Value.ToLower() }
+# Write with Unix line endings (LF only)
+$approveScript -replace "`r`n", "`n" | Set-Content -Path $tempScriptPath -NoNewline
+$wslTempScript = ConvertTo-WslPath $tempScriptPath
 
-wsl -d Ubuntu -- bash -c "chmod +x '$wslTempScript' && '$wslTempScript'"
+# Convert to Unix format and execute
+wsl -d Ubuntu -- bash -c "dos2unix '$wslTempScript' 2>/dev/null || sed -i 's/\r$//' '$wslTempScript'; chmod +x '$wslTempScript' && '$wslTempScript'"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to approve/commit chaincode" -ForegroundColor Red

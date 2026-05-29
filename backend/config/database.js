@@ -15,7 +15,11 @@ const pool = new Pool({
   max: parseInt(process.env.DB_POOL_SIZE) || 10, // Maximum connections in pool
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: process.env.NODE_ENV === 'production',
+    // In production, provide CA certificate:
+    // ca: fs.readFileSync('/path/to/ca-certificate.crt').toString(),
+  } : false,
 });
 
 // Set search_path setelah connect

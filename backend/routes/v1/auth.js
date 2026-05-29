@@ -8,6 +8,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../../config/database');
+const { authLimiter, registerLimiter } = require('../../middleware/rateLimiter');
 
 /**
  * @swagger
@@ -133,7 +134,7 @@ const { pool } = require('../../config/database');
  *       500:
  *         description: Registration failed
  */
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   try {
     const { nip, nama, email, password, role } = req.body;
     
@@ -231,7 +232,7 @@ router.post('/register', async (req, res) => {
  *       500:
  *         description: Login failed
  */
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     
@@ -289,6 +290,9 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       {
         expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+        issuer: 'chainrank-api',
+        audience: 'chainrank-app',
+        algorithm: 'HS256',
       }
     );
     

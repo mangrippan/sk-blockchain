@@ -71,6 +71,10 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 // MIDDLEWARE
 // ============================================
 
+// Rate limiting - Apply before other middleware
+const { globalLimiter } = require('./middleware/rateLimiter');
+app.use(globalLimiter);
+
 // CORS - Allow frontend to access API
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -81,8 +85,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files (uploaded documents)
-app.use('/uploads', express.static('uploads'));
+// Serve static files (uploaded documents) - DISABLED for security
+// Use /api/v1/files endpoints instead for authorized file access
+// app.use('/uploads', express.static('uploads'));
 
 // Request logging (simple)
 app.use((req, res, next) => {
@@ -129,12 +134,17 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
  *                   example: development
  */
 app.get('/health', (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    database: 'connected', // Simple status for now
+    // Only expose environment details in development
+    ...(isProduction ? {} : {
+      environment: process.env.NODE_ENV || 'development',
+      database: 'connected',
+    }),
   });
 });
 
@@ -143,6 +153,7 @@ app.use('/api/v1/auth', require('./routes/v1/auth'));
 app.use('/api/v1/ref', require('./routes/v1/ref'));
 app.use('/api/v1/kegiatan', require('./routes/v1/kegiatan'));
 app.use('/api/v1/usulan', require('./routes/v1/usulan'));
+app.use('/api/v1/files', require('./routes/v1/files')); // Secure file download
 // app.use('/api/v1/users', require('./routes/v1/users')); // TODO: Week 2
 
 // Root endpoint
@@ -169,17 +180,8 @@ app.use((req, res) => {
 // ERROR HANDLER
 // ============================================
 
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
-  
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
-  
-  res.status(statusCode).json({
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
-});
+const { globalErrorHandler } = require('./utils/errorHandler');
+app.use(globalErrorHandler);
 
 // ============================================
 // START SERVER

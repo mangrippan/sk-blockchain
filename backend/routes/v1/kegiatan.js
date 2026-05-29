@@ -14,6 +14,8 @@ const { auth, checkRole } = require('../../middleware/auth');
 const { hashFileBuffer: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
 const Kegiatan = require('../../models/Kegiatan');
+const { sanitizePagination, getPaginationMeta } = require('../../utils/pagination');
+const { validateUploadedFile } = require('../../middleware/fileValidation');
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -94,7 +96,8 @@ const upload = multer({
  */
 router.get('/', auth, async (req, res) => {
   try {
-    const { status, search, limit = 20, offset = 0 } = req.query;
+    const { status, search } = req.query;
+    const { limit, offset, page } = sanitizePagination(req.query);
     const userId = req.user.id;
     const userRole = req.user.role;
     
@@ -156,15 +159,11 @@ router.get('/', auth, async (req, res) => {
       ${whereClause.replace(/LIMIT.*/, '')}
     `;
     const countResult = await pool.query(countQuery, values.slice(0, -2));
+    const total = parseInt(countResult.rows[0].total);
     
     res.json({
       data: result.rows,
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        count: result.rows.length,
-      },
+      pagination: getPaginationMeta(total, limit, page),
     });
     
   } catch (error) {
@@ -370,7 +369,7 @@ router.get('/:id', auth, async (req, res) => {
  *       500:
  *         description: Failed to create kegiatan
  */
-router.post('/', auth, upload.single('file'), async (req, res) => {
+router.post('/', auth, upload.single('file'), validateUploadedFile, async (req, res) => {
   try {
     const {
       ref_kegiatan_id,
@@ -677,7 +676,7 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
  *       500:
  *         description: Failed to resubmit kegiatan
  */
-router.post('/:id/resubmit', auth, upload.single('dokumen'), async (req, res) => {
+router.post('/:id/resubmit', auth, upload.single('dokumen'), validateUploadedFile, async (req, res) => {
   try {
     const { id: parentId } = req.params;
     const userId = req.user.id;

@@ -49,13 +49,16 @@ async function connectGateway() {
     const ccp = JSON.parse(fs.readFileSync(CONNECTION_PROFILE_PATH, 'utf8'));
     const wallet = await Wallets.newFileSystemWallet(WALLET_PATH);
 
-    // Check if identity exists in wallet (try admin first, fallback to appUser)
-    let identityName = 'admin';
+    // Check if identity exists in wallet
+    // SECURITY: Use appUser for normal operations (least privilege)
+    // Only use admin for enrollment/maintenance tasks
+    const preferredIdentity = process.env.FABRIC_USER_ID || 'appUser';
+    let identityName = preferredIdentity;
     let identity = await wallet.get(identityName);
     
     if (!identity) {
-      console.warn('⚠️  Fabric identity "admin" not found, trying appUser...');
-      identityName = 'appUser';
+      console.warn(`⚠️  Fabric identity "${preferredIdentity}" not found, trying admin...`);
+      identityName = 'admin';
       identity = await wallet.get(identityName);
     }
     
