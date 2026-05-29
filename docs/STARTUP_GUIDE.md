@@ -159,6 +159,35 @@ docker ps --filter "name=chainrank"
 .\restart-fabric-ccaas.ps1
 ```
 
+### Ledger already exists error
+Jika muncul error saat startup network:
+```
+cannot create ledger from genesis block: ledger [skchannel] already exists with state [ACTIVE]
+```
+
+**Penyebab**: Docker volumes dari network sebelumnya masih ada  
+**Solusi**: Deep clean network dan volumes
+
+```powershell
+cd fabric-network
+.\clean-network.ps1
+```
+
+Script ini akan:
+- Stop semua containers
+- Hapus Docker volumes (tempat ledger data disimpan)
+- Hapus chaincode packages & wallet
+- Clean Docker artifacts
+
+Setelah cleanup, start ulang dari awal:
+```powershell
+.\start-network-ccaas.ps1
+cd ..\backend
+node enroll-wallet.js
+```
+
+> **⚠️ Warning**: `clean-network.ps1` akan menghapus semua data blockchain. Hanya gunakan untuk development/testing.
+
 ---
 
 ## Environment Variables (backend/.env)
@@ -176,6 +205,18 @@ FABRIC_WALLET_PATH=../fabric-config/wallet
 | Log | Artinya |
 |-----|---------|
 | ✅ Connected to PostgreSQL database | DB OK |
-| ✅ Connected to Fabric network as admin | Blockchain OK |
+| ✅ Connected to Fabric network as appUser | Blockchain OK |
 | ⚠️ Fabric integration disabled | `FABRIC_ENABLED=false` |
 | ❌ Failed to connect to Fabric network | Cek Docker/wallet |
+
+### Normal Warnings saat Startup
+
+Saat backend startup, mungkin muncul error gRPC seperti ini:
+```
+error: [ServiceEndpoint]: Failed to connect before the deadline on Endorser
+error: [ServiceEndpoint]: waitForReady - Failed to connect to remote gRPC server
+```
+
+**Ini NORMAL** ✅ - Fabric SDK melakukan service discovery dengan mencoba berbagai endpoints. Beberapa connection attempt timeout, tapi SDK tetap berhasil connect.
+
+**Tanda sukses:** Lihat log `✅ Connected to Fabric network as appUser` - ini artinya koneksi berhasil meskipun ada warning di atas.
