@@ -13,11 +13,11 @@ param(
 $ErrorActionPreference = "Continue"
 $PROJECT_ROOT = $PSScriptRoot
 
-Write-Host ""
-Write-Host "  ╔══════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║   ChainRank - Starting All Services  ║" -ForegroundColor Cyan
-Write-Host "  ╚══════════════════════════════════════╝" -ForegroundColor Cyan
-Write-Host ""
+Write-Host ''
+Write-Host '  ========================================' -ForegroundColor Cyan
+Write-Host '    ChainRank - Starting All Services    ' -ForegroundColor Cyan
+Write-Host '  ========================================' -ForegroundColor Cyan
+Write-Host ''
 
 $startTime = Get-Date
 
@@ -157,9 +157,9 @@ if ($SkipFrontend) {
 $elapsed = [math]::Round(((Get-Date) - $startTime).TotalSeconds)
 
 Write-Host ''
-Write-Host '  ╔══════════════════════════════════════╗' -ForegroundColor Green
-Write-Host '  ║         All Services Started!        ║' -ForegroundColor Green
-Write-Host '  ╚══════════════════════════════════════╝' -ForegroundColor Green
+Write-Host '  ========================================' -ForegroundColor Green
+Write-Host '         All Services Started!           ' -ForegroundColor Green
+Write-Host '  ========================================' -ForegroundColor Green
 Write-Host ''
 Write-Host '  Services:' -ForegroundColor White
 Write-Host '    Database    : PostgreSQL (localhost:5434)' -ForegroundColor Gray
