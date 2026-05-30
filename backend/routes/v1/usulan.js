@@ -821,7 +821,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       );
     }
 
-    // Create snapshot for each kegiatan
+    // Mark kegiatan as used_in_usulan_id
     for (const kegiatan of kegiatanList) {
       await client.query(
         `INSERT INTO sk.usulan_kegiatan_snapshot (
@@ -867,34 +867,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     );
     const submitted = submitResult.rows[0];
 
-    // Record to blockchain with snapshot hash (non-blocking)
-    let txResult = null;
-    try {
-      const hashNIP = crypto.createHash('sha256').update(req.user.nip_nidn || '').digest('hex');
-      txResult = await Promise.race([
-        fabricClient.recordUsulanCreation(
-          usulan.id,
-          hashNIP,
-          totalPoin,
-          targetJabatan.nama,
-          referensi_id || null,
-          snapshotHash
-        ),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Blockchain timeout')), 5000)
-        )
-      ]);
-
-      if (txResult) {
-        await client.query(
-          `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
-          [txResult, usulan.id]
-        );
-      }
-    } catch (blockchainError) {
-      console.warn('⚠️  Blockchain recording failed, continuing without it:', blockchainError.message);
-      // Continue without blockchain - usulan still created in database
-    }
+    // Blockchain recording removed - only record when SK is issued
+    // Usulan at 'pending' status is not final yet
 
     // Audit log
     await client.query(
@@ -977,11 +951,8 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       [req.params.id]
     );
 
-    // Record to blockchain
-    const txResult = await fabricClient.recordUsulanProcess(req.params.id, req.user.id);
-    if (txResult) {
-      await Usulan.updateBlockchainTx(req.params.id, txResult);
-    }
+    // Blockchain recording removed - only record when SK is issued
+    // 'diproses' status is not final yet
 
     // Audit log
     await pool.query(
@@ -990,7 +961,6 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'diproses', 
         kegiatan_locked: lockResult.rowCount,
-        blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
 
@@ -1064,13 +1034,8 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
       [req.params.id]
     );
 
-    // Record to blockchain
-    const txResult = await fabricClient.recordUsulanRejection(
-      req.params.id, req.user.id, catatan_penolakan
-    );
-    if (txResult) {
-      await Usulan.updateBlockchainTx(req.params.id, txResult);
-    }
+    // Blockchain recording removed - rejected usulan should not be in blockchain
+    // Only approved/final usulan (SK issued) will be recorded
 
     // Audit log
     await pool.query(
@@ -1080,7 +1045,6 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
         status: 'rejected', 
         catatan_penolakan, 
         kegiatan_unlocked: unlockResult.rowCount,
-        blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
 
@@ -1221,7 +1185,8 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       console.warn(`⚠️  Warning: No kegiatan locked for usulan ${req.params.id}. This might indicate data inconsistency.`);
     }
 
-    // Record to blockchain with SK hash
+    // Record to blockchain ONLY when SK is issued (final state)
+    // This is the only blockchain transaction for usulan lifecycle
     const txResult = await fabricClient.recordUsulanSKIssued(
       req.params.id,
       sk_document_hash || 'no-document',

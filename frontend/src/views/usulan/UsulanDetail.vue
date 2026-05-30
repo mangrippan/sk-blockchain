@@ -29,7 +29,13 @@
           </div>
           <div>
             <p class="text-sm text-gray-500">Blockchain TX</p>
-            <p class="font-mono text-xs text-gray-600 break-all">{{ usulan.tx_id_fabric || '-' }}</p>
+            <p v-if="usulan.tx_id_fabric" class="font-mono text-xs text-gray-600 break-all">{{ usulan.tx_id_fabric }}</p>
+            <p v-else-if="usulan.status === 'sk_issued'" class="text-xs text-amber-600">
+              Blockchain recording pending
+            </p>
+            <p v-else class="text-xs text-gray-500">
+              Akan tercatat setelah SK terbit
+            </p>
           </div>
           <div v-if="usulan.catatan_penolakan" class="md:col-span-2">
             <p class="text-sm text-gray-500">Catatan Penolakan</p>
