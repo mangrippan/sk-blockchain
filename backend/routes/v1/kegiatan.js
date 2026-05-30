@@ -206,7 +206,7 @@ router.get('/stats/dashboard', auth, async (req, res) => {
         COUNT(*) FILTER (WHERE k.status = 'rejected') as rejected,
         COUNT(*) FILTER (WHERE k.status = 'revision_requested') as revision,
         COUNT(*) as total,
-        COALESCE(SUM(CASE WHEN k.status = 'verified' THEN k.poin_kum ELSE 0 END), 0) as total_poin
+        COALESCE(SUM(CASE WHEN k.status = 'verified' AND k.used_in_usulan_id IS NULL THEN k.poin_kum ELSE 0 END), 0) as total_poin
       FROM sk.kegiatan_dosen k
       WHERE k.deleted_at IS NULL ${userFilter}
     `;
@@ -608,7 +608,12 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       try {
         const txId = await fabricClient.recordKegiatanVerification(id, finalStatus, userId);
         if (txId) {
-          // Blockchain transaction recorded (no separate column needed)
+          // Save verification tx to database
+          await pool.query(
+            'UPDATE sk.kegiatan_dosen SET tx_id_verify_fabric = $1 WHERE id = $2',
+            [txId, id]
+          );
+          result.rows[0].tx_id_verify_fabric = txId;
           console.log(`✅ Verification recorded on blockchain: ${txId}`);
         }
       } catch (fabricErr) {

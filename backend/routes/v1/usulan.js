@@ -964,6 +964,19 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       return res.status(400).json({ error: 'Cannot process this usulan. Check status.' });
     }
 
+    // Lock kegiatan when usulan is being processed (Option B)
+    const lockResult = await pool.query(
+      `UPDATE sk.kegiatan_dosen 
+       SET used_in_usulan_id = $1, updated_at = NOW()
+       WHERE id IN (
+         SELECT kegiatan_id 
+         FROM sk.usulan_kegiatan_snapshot 
+         WHERE usulan_id = $1
+       )
+       AND used_in_usulan_id IS NULL`,
+      [req.params.id]
+    );
+
     // Record to blockchain
     const txResult = await fabricClient.recordUsulanProcess(req.params.id, req.user.id);
     if (txResult) {
@@ -975,11 +988,17 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'diproses', blockchain_tx: txResult ? 'success' : 'skipped',
+        status: 'diproses', 
+        kegiatan_locked: lockResult.rowCount,
+        blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
 
-    res.json({ message: 'Usulan sedang diproses', data: result });
+    res.json({ 
+      message: 'Usulan sedang diproses', 
+      data: result,
+      kegiatan_locked: lockResult.rowCount
+    });
   } catch (error) {
     console.error('Error processing usulan:', error);
     res.status(500).json({ error: 'Failed to process usulan', message: error.message });
@@ -1037,6 +1056,14 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
       return res.status(400).json({ error: 'Cannot reject this usulan. Check status.' });
     }
 
+    // Unlock kegiatan when usulan is rejected (Option B)
+    const unlockResult = await pool.query(
+      `UPDATE sk.kegiatan_dosen 
+       SET used_in_usulan_id = NULL, updated_at = NOW()
+       WHERE used_in_usulan_id = $1`,
+      [req.params.id]
+    );
+
     // Record to blockchain
     const txResult = await fabricClient.recordUsulanRejection(
       req.params.id, req.user.id, catatan_penolakan
@@ -1050,11 +1077,18 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'REJECT', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'rejected', catatan_penolakan, blockchain_tx: txResult ? 'success' : 'skipped',
+        status: 'rejected', 
+        catatan_penolakan, 
+        kegiatan_unlocked: unlockResult.rowCount,
+        blockchain_tx: txResult ? 'success' : 'skipped',
       })]
     );
 
-    res.json({ message: 'Usulan ditolak', data: result });
+    res.json({ 
+      message: 'Usulan ditolak', 
+      data: result,
+      kegiatan_unlocked: unlockResult.rowCount
+    });
   } catch (error) {
     console.error('Error rejecting usulan:', error);
     res.status(500).json({ error: 'Failed to reject usulan', message: error.message });
@@ -1173,18 +1207,19 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       );
     }
 
-    // Lock all kegiatan used in this usulan (KUM reset)
-    await client.query(
-      `UPDATE sk.kegiatan_dosen 
-       SET used_in_usulan_id = $1, updated_at = NOW()
-       WHERE id IN (
-         SELECT kegiatan_id 
-         FROM sk.usulan_kegiatan_snapshot 
-         WHERE usulan_id = $1
-       )
-       AND used_in_usulan_id IS NULL`,
+    // Kegiatan already locked when usulan was processed (no need to lock again)
+    // Verify that kegiatan are still locked
+    const lockedCheck = await client.query(
+      `SELECT COUNT(*) as locked_count
+       FROM sk.kegiatan_dosen 
+       WHERE used_in_usulan_id = $1`,
       [req.params.id]
     );
+    const lockedCount = parseInt(lockedCheck.rows[0].locked_count);
+    
+    if (lockedCount === 0) {
+      console.warn(`⚠️  Warning: No kegiatan locked for usulan ${req.params.id}. This might indicate data inconsistency.`);
+    }
 
     // Record to blockchain with SK hash
     const txResult = await fabricClient.recordUsulanSKIssued(
