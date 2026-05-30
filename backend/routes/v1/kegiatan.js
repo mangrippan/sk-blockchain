@@ -442,27 +442,8 @@ router.post('/', auth, upload.single('file'), validateUploadedFile, async (req, 
       [userId, kegiatan.id, JSON.stringify({ ref_kegiatan_id, poin_kum, file_hash }), req.ip, 'Kegiatan baru dibuat']
     );
 
-    // Submit to blockchain (non-blocking, fallback if unavailable)
-    if (fabricClient.isFabricEnabled()) {
-      try {
-        const txId = await fabricClient.recordKegiatanCreation(
-          kegiatan.id, userId, file_hash, ref_kegiatan_id, poin_kum
-        );
-        // Update tx_id if successful
-        if (txId) {
-          await pool.query(
-            'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
-            [txId, kegiatan.id]
-          );
-          kegiatan.tx_id_fabric = txId;
-          console.log(`✅ Blockchain recorded for kegiatan ${kegiatan.id}: txId=${txId}`);
-        } else {
-          console.warn(`⚠️  Blockchain recording returned null for kegiatan ${kegiatan.id}`);
-        }
-      } catch (fabricErr) {
-        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
-      }
-    }
+    // Blockchain recording moved to verification endpoint
+    // Only verified kegiatan will be recorded to blockchain
     
     res.status(201).json({
       message: 'Kegiatan created successfully',
@@ -545,8 +526,13 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       });
     }
     
-    // Check if kegiatan exists
-    const checkQuery = 'SELECT id, status FROM sk.kegiatan_dosen WHERE id = $1 AND deleted_at IS NULL';
+    // Check if kegiatan exists and get details for blockchain recording
+    const checkQuery = `
+      SELECT k.*, u.id as dosen_id
+      FROM sk.kegiatan_dosen k
+      JOIN sk.users u ON k.dosen_id = u.id
+      WHERE k.id = $1 AND k.deleted_at IS NULL
+    `;
     const checkResult = await pool.query(checkQuery, [id]);
     
     if (checkResult.rows.length === 0) {
@@ -554,6 +540,8 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
         error: 'Kegiatan not found',
       });
     }
+    
+    const kegiatanData = checkResult.rows[0];
     
     // Update status - direct rejection, no revision option
     const query = `
@@ -586,23 +574,30 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       [userId, id, JSON.stringify({ status, rejection_reason }), req.ip, actionDescription]
     );
 
-    // Record verification on blockchain
-    if (fabricClient.isFabricEnabled()) {
+    // Record to blockchain ONLY for verified kegiatan
+    if (status === 'verified' && fabricClient.isFabricEnabled()) {
       try {
-        const txId = await fabricClient.recordKegiatanVerification(id, status, userId);
+        const txId = await fabricClient.recordKegiatanCreation(
+          id,
+          kegiatanData.dosen_id,
+          kegiatanData.file_hash,
+          kegiatanData.ref_kegiatan_id,
+          kegiatanData.poin_kum
+        );
         if (txId) {
-          // Save verification tx to database
+          // Save blockchain tx to database
           await pool.query(
-            'UPDATE sk.kegiatan_dosen SET tx_id_verify_fabric = $1 WHERE id = $2',
+            'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
             [txId, id]
           );
-          result.rows[0].tx_id_verify_fabric = txId;
-          console.log(`✅ Verification recorded on blockchain: ${txId}`);
+          result.rows[0].tx_id_fabric = txId;
+          console.log(`✅ Verified kegiatan recorded to blockchain: ${txId}`);
         }
       } catch (fabricErr) {
-        console.warn('⚠️  Blockchain verification recording failed:', fabricErr.message);
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
       }
     }
+    // Rejected kegiatan are NOT recorded to blockchain - only in database
 
     res.json({
       message: `Kegiatan ${status} successfully`,

@@ -88,9 +88,13 @@
               <p class="text-xs text-gray-500">Blockchain TX ID</p>
               <p class="font-mono text-sm text-gray-700 break-all">{{ kegiatan.tx_id_fabric }}</p>
             </div>
-            <div v-else class="flex items-center gap-2 text-amber-600 text-sm">
+            <div v-else-if="kegiatan.status === 'verified'" class="flex items-center gap-2 text-amber-600 text-sm">
               <AlertCircle :size="16" />
-              <span>Belum tercatat di blockchain</span>
+              <span>Blockchain recording pending</span>
+            </div>
+            <div v-else class="flex items-center gap-2 text-gray-500 text-sm">
+              <AlertCircle :size="16" />
+              <span>Kegiatan akan tercatat di blockchain setelah diverifikasi</span>
             </div>
           </div>
         </div>
