@@ -366,9 +366,10 @@ router.get('/jabatan', async (req, res) => {
 router.get('/jabatan/next/:userId', auth, async (req, res) => {
   try {
     const { userId } = req.params;
+    const userIdNum = parseInt(userId, 10);
     
     // Authorization check: dosen can only check their own userId
-    if (req.user.role === 'dosen' && userId !== req.user.id) {
+    if (req.user.role === 'dosen' && userIdNum !== req.user.id) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'You can only view your own promotion path'
@@ -378,7 +379,7 @@ router.get('/jabatan/next/:userId', auth, async (req, res) => {
     // Get current jabatan
     const userResult = await pool.query(
       'SELECT jabatan_id FROM sk.users WHERE id = $1',
-      [userId]
+      [userIdNum]
     );
     
     if (userResult.rows.length === 0) {
