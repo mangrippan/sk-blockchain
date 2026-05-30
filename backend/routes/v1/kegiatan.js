@@ -72,7 +72,7 @@ const upload = multer({
  *         name: status
  *         schema:
  *           type: string
- *           enum: [unverified, verified, rejected, revision_requested]
+ *           enum: [unverified, verified, rejected]
  *         description: Filter by status
  *       - in: query
  *         name: limit
@@ -204,7 +204,6 @@ router.get('/stats/dashboard', auth, async (req, res) => {
         COUNT(*) FILTER (WHERE k.status = 'unverified') as pending,
         COUNT(*) FILTER (WHERE k.status = 'verified') as verified,
         COUNT(*) FILTER (WHERE k.status = 'rejected') as rejected,
-        COUNT(*) FILTER (WHERE k.status = 'revision_requested') as revision,
         COUNT(*) as total,
         COALESCE(SUM(CASE WHEN k.status = 'verified' AND k.used_in_usulan_id IS NULL THEN k.poin_kum ELSE 0 END), 0) as total_poin
       FROM sk.kegiatan_dosen k
@@ -234,7 +233,6 @@ router.get('/stats/dashboard', auth, async (req, res) => {
         pending: parseInt(stats.pending),
         verified: parseInt(stats.verified),
         rejected: parseInt(stats.rejected),
-        revision: parseInt(stats.revision),
         total_poin: parseFloat(stats.total_poin),
       },
       recent: recentResult.rows,
@@ -491,7 +489,7 @@ router.post('/', auth, upload.single('file'), validateUploadedFile, async (req, 
  * /api/v1/kegiatan/{id}/verify:
  *   put:
  *     summary: Verify kegiatan
- *     description: Verify or reject kegiatan (admin/pimpinan only)
+ *     description: Verify or reject kegiatan (admin/pimpinan only). Rejected kegiatan cannot be revised.
  *     tags: [Kegiatan]
  *     security:
  *       - bearerAuth: []
@@ -514,14 +512,9 @@ router.post('/', auth, upload.single('file'), validateUploadedFile, async (req, 
  *               status:
  *                 type: string
  *                 enum: [verified, rejected]
- *               allow_revision:
- *                 type: boolean
- *                 description: If true when rejecting, allows dosen to revise and resubmit
  *               rejection_reason:
  *                 type: string
- *               catatan_penolakan:
- *                 type: string
- *                 description: Required when allow_revision is true
+ *                 description: Required when rejecting
  *     responses:
  *       200:
  *         description: Kegiatan status updated
@@ -535,7 +528,7 @@ router.post('/', auth, upload.single('file'), validateUploadedFile, async (req, 
 router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, allow_revision = false, rejection_reason, catatan_penolakan } = req.body;
+    const { status, rejection_reason } = req.body;
     const userId = req.user.id;
     
     if (!status || !['verified', 'rejected'].includes(status)) {
@@ -545,10 +538,10 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       });
     }
     
-    // Validate rejection notes when rejecting
-    if (status === 'rejected' && !catatan_penolakan && !rejection_reason) {
+    // Validate rejection reason when rejecting
+    if (status === 'rejected' && !rejection_reason) {
       return res.status(400).json({
-        error: 'Catatan penolakan or rejection reason is required when rejecting',
+        error: 'Rejection reason is required when rejecting',
       });
     }
     
@@ -562,51 +555,41 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       });
     }
     
-    // Determine final status based on allow_revision flag
-    let finalStatus = status;
-    if (status === 'rejected' && allow_revision) {
-      finalStatus = 'revision_requested';
-    }
-    
-    // Update status
+    // Update status - direct rejection, no revision option
     const query = `
       UPDATE sk.kegiatan_dosen
       SET status = $1,
           verified_by = $2,
           verified_at = NOW(),
-          rejection_reason = $3,
-          catatan_penolakan = $4
-      WHERE id = $5 AND deleted_at IS NULL
+          rejection_reason = $3
+      WHERE id = $4 AND deleted_at IS NULL
       RETURNING *
     `;
     
     const values = [
-      finalStatus,
+      status,
       userId,
       rejection_reason || null,
-      catatan_penolakan || null,
       id,
     ];
     
     const result = await pool.query(query, values);
     
-    // Log audit trail with clear differentiation
-    const actionDescription = finalStatus === 'revision_requested' 
-      ? 'Kegiatan rejected with revision allowed'
-      : finalStatus === 'rejected'
-      ? 'Kegiatan rejected (final)'
+    // Log audit trail
+    const actionDescription = status === 'rejected'
+      ? 'Kegiatan rejected'
       : 'Kegiatan verified';
       
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values, ip_address, description)
        VALUES ($1, 'VERIFY', 'kegiatan_dosen', $2, $3, $4, $5)`,
-      [userId, id, JSON.stringify({ status: finalStatus, allow_revision, rejection_reason, catatan_penolakan }), req.ip, actionDescription]
+      [userId, id, JSON.stringify({ status, rejection_reason }), req.ip, actionDescription]
     );
 
     // Record verification on blockchain
     if (fabricClient.isFabricEnabled()) {
       try {
-        const txId = await fabricClient.recordKegiatanVerification(id, finalStatus, userId);
+        const txId = await fabricClient.recordKegiatanVerification(id, status, userId);
         if (txId) {
           // Save verification tx to database
           await pool.query(
@@ -622,7 +605,7 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     }
 
     res.json({
-      message: `Kegiatan ${finalStatus === 'revision_requested' ? 'revision requested' : finalStatus} successfully`,
+      message: `Kegiatan ${status} successfully`,
       data: result.rows[0],
     });
     
@@ -635,12 +618,19 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
   }
 });
 
+/* 
+ * RESUBMIT ENDPOINT DISABLED
+ * Kegiatan yang ditolak tidak bisa direvisi/submit ulang
+ * Dosen harus membuat kegiatan baru jika ditolak
+ */
+
+/*
 /**
  * @swagger
  * /api/v1/kegiatan/{id}/resubmit:
  *   post:
- *     summary: Resubmit rejected kegiatan with revisions
- *     description: Create a new version of a kegiatan that was rejected with revision requested
+ *     summary: Resubmit or edit kegiatan with revisions
+ *     description: Create a new version of a kegiatan. Admin and dosen can resubmit kegiatan regardless of status.
  *     tags: [Kegiatan]
  *     security:
  *       - bearerAuth: []
@@ -651,7 +641,7 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
  *         schema:
  *           type: string
  *           format: uuid
- *         description: Parent kegiatan ID (the one with status 'revision_requested')
+ *         description: Parent kegiatan ID
  *     requestBody:
  *       required: true
  *       content:
@@ -673,18 +663,19 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
  *       201:
  *         description: Kegiatan resubmitted successfully
  *       400:
- *         description: Invalid request or parent kegiatan status
+ *         description: Invalid request
  *       403:
- *         description: Forbidden - not the owner
+ *         description: Forbidden - not the owner (dosen only) or not admin
  *       404:
  *         description: Parent kegiatan not found
  *       500:
  *         description: Failed to resubmit kegiatan
- */
+ *\/
 router.post('/:id/resubmit', auth, upload.single('dokumen'), validateUploadedFile, async (req, res) => {
   try {
     const { id: parentId } = req.params;
     const userId = req.user.id;
+    const userRole = req.user.role;
     const { ref_kegiatan_id, deskripsi } = req.body;
     
     // Validate parent kegiatan exists and has correct status
@@ -704,21 +695,16 @@ router.post('/:id/resubmit', auth, upload.single('dokumen'), validateUploadedFil
     
     const parent = parentResult.rows[0];
     
-    // Permission check: only owner can resubmit
-    if (parent.dosen_id !== userId) {
+    // Permission check: owner or admin can resubmit
+    const isAdmin = ['admin_sdm', 'pimpinan', 'superadmin'].includes(userRole);
+    if (!isAdmin && parent.dosen_id !== userId) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only resubmit your own kegiatan',
       });
     }
     
-    // Status validation: must be revision_requested
-    if (parent.status !== 'revision_requested') {
-      return res.status(400).json({
-        error: 'Invalid parent status',
-        message: `Can only resubmit kegiatan with status 'revision_requested'. Current status: ${parent.status}`,
-      });
-    }
+    // Status validation removed for admin and dosen - they can resubmit regardless of status
     
     // Get ref_kegiatan details for poin_kum
     const refKegiatanId = ref_kegiatan_id || parent.ref_kegiatan_id;
@@ -832,6 +818,7 @@ router.post('/:id/resubmit', auth, upload.single('dokumen'), validateUploadedFil
     });
   }
 });
+*/
 
 /**
  * @swagger

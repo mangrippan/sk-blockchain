@@ -29,8 +29,7 @@
           <option value="">Semua Status</option>
           <option value="unverified">Belum Diverifikasi</option>
           <option value="verified">Terverifikasi</option>
-          <option value="revision_requested">Perlu Revisi</option>
-          <option value="rejected">Ditolak Final</option>
+          <option value="rejected">Ditolak</option>
         </select>
         
         <button
@@ -42,35 +41,7 @@
       </div>
     </div>
     
-    <!-- Revision Alert Banner (Dosen only) -->
-    <div
-      v-if="!auth.canVerify && revisionNeededCount > 0"
-      class="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="flex-shrink-0">
-            <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-            </svg>
-          </div>
-          <div>
-            <p class="font-medium text-amber-900">
-              {{ revisionNeededCount }} kegiatan perlu direvisi
-            </p>
-            <p class="text-sm text-amber-700">
-              Silakan perbaiki dan kirim ulang kegiatan yang ditolak dengan catatan revisi.
-            </p>
-          </div>
-        </div>
-        <button
-          @click="filters.status = 'revision_requested'; fetchKegiatan()"
-          class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors whitespace-nowrap"
-        >
-          Lihat Kegiatan
-        </button>
-      </div>
-    </div>
+    <!-- No more revision alert - kegiatan yang ditolak tidak bisa direvisi -->
     
     <!-- Table -->
     <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -114,25 +85,15 @@
                   v{{ item.versi }}
                 </span>
               </div>
-              <!-- Show rejection notes alert -->
-              <div v-if="!auth.canVerify && item.status === 'revision_requested' && item.catatan_penolakan" class="mt-1">
-                <p class="text-xs text-amber-600 line-clamp-1">⚠️ Lihat catatan revisi</p>
+              <!-- Show rejection reason if rejected -->
+              <div v-if="!auth.canVerify && item.status === 'rejected' && item.rejection_reason" class="mt-1">
+                <p class="text-xs text-red-600 line-clamp-1">⚠️ {{ item.rejection_reason }}</p>
               </div>
             </td>
             <td class="px-6 py-4 text-sm text-gray-600">{{ formatDate(item.created_at) }}</td>
             <td v-if="!auth.canVerify" class="px-6 py-4 text-right" @click.stop>
               <div class="flex items-center justify-end gap-2">
-                <!-- Revision Button -->
-                <button
-                  v-if="item.status === 'revision_requested'"
-                  @click="openRevisionModal(item)"
-                  class="flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors text-sm font-medium"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Revisi
-                </button>
+                <!-- No more edit/revision button - kegiatan yang ditolak tidak bisa direvisi -->
                 <!-- Delete Button (only for unverified) -->
                 <button
                   v-if="item.status === 'unverified'"
@@ -353,9 +314,7 @@ const visiblePages = computed(() => {
   return pages
 })
 
-const revisionNeededCount = computed(() => {
-  return kegiatan.value.filter(k => k.status === 'revision_requested').length
-})
+// Revision feature removed - kegiatan yang ditolak tidak bisa direvisi
 
 onMounted(() => {
   fetchKegiatan()
@@ -490,10 +449,7 @@ function getSelectedKegiatanName() {
   return selected ? selected.nama_kegiatan : ''
 }
 
-function openRevisionModal(item) {
-  // Navigate to revision page/form with the kegiatan ID
-  router.push(`/kegiatan/${item.id}/revisi`)
-}
+// Revision feature removed - no more resubmit/revisi functionality
 
 </script>
 
