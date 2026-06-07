@@ -1,27 +1,27 @@
 {
   "project": "ChainRank — Sistem Usulan Kenaikan Pangkat Blockchain",
-  "runAt": "2026-06-07T12:10:45.749Z",
+  "runAt": "2026-06-07T15:24:27.911Z",
   "baseUrl": "http://localhost:3000/api/v1",
   "testAccount": {
-    "email": "e2e.dosen.1780834231349@chainrank.test",
-    "nip": "E2E1780834231349",
-    "generatedId": 58
+    "email": "e2e.dosen.1780845852869@chainrank.test",
+    "nip": "E2E1780845852869",
+    "generatedId": 59
   },
   "fixtures": {
     "kegiatanIds": [
-      "34a26a03-774b-42fc-a3da-6c9887711aeb",
-      "b454c120-9856-4c59-8851-0d62b8622c4d",
-      "07b60083-96da-4328-9406-4e57a1ebe130"
+      "ad9883ff-446a-4f31-b5e4-1cb81ef41baf",
+      "b6a2a139-44e4-4c87-bac9-98d9dc4178f9",
+      "851fe567-d6e5-4411-9cda-f1bd665a6f41"
     ],
     "kegiatanTxIds": [
-      "52a0e1763738493d2f8e5919d72c02f4f9794aaa54bb452aab1ccbbd4a6caefc",
-      "1631cb5d8180149ce57bd61ada94bef729aa77e580efbc56ae63634665652fba",
-      "01084870ba1eb5cdd5bc56b3add92dee818e8a4e25deb4a644d46d069e9b5c6a"
+      "c25e8564544dd9f50fcc4ccf1ae50b0b90218e7223efd082624bf14de1ee7abc",
+      "8214a0e4f59edf6f7b18134b87e0d28d7279bf29b7d89a9689dc21fac54508c6",
+      "184a04effe27a4fd099bcb96a7073e3856b4b0eb38e3e6a4c66ea9b829590d6c"
     ],
-    "usulanId": "bb5bb3cf-5e1b-4a65-a281-c189c9fb9f07",
-    "usulanTxId": "ab594b9c17281f0e5be7fec3bbc4ec2eef12b1a57282f61febc7826f10299268"
+    "usulanId": "fa809221-10de-4dcc-b4ff-91a65160c1e6",
+    "usulanTxId": "5710373c493df917fb245b1c91d017eb340a3406891efbb4cddb9a5269af8c6b"
   },
-  "totalDurationMs": 14394,
+  "totalDurationMs": 15035,
   "totals": {
     "steps": 20,
     "passed": 20,
@@ -34,122 +34,122 @@
     {
       "name": "Health check (GET /health)",
       "status": "PASS",
-      "durationMs": 72,
-      "detail": "server status=OK, database=connected, uptime=17s"
+      "durationMs": 80,
+      "detail": "server status=OK, database=connected, uptime=141s"
     },
     {
       "name": "Register new dosen account (POST /auth/register)",
       "status": "PASS",
-      "durationMs": 282,
-      "detail": "created user id=58, email=e2e.dosen.1780834231349@chainrank.test, role=dosen"
+      "durationMs": 366,
+      "detail": "created user id=59, email=e2e.dosen.1780845852869@chainrank.test, role=dosen"
     },
     {
       "name": "Login as dosen (new account)",
       "status": "PASS",
-      "durationMs": 265,
-      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NTgsIm5pcF9uaWRuIjoiRTJFMTc4MDgzNDIzMTM0OSIsImVtYWlsIjoiZTJlLmRvc2VuLjE3ODA4MzQyMzEzNDlAY2hhaW5yYW5rLnRlc3QiLCJyb2xlIjoiZG9zZW4iLCJpYXQiOjE3ODA4MzQyMzEsImV4cCI6MTc4MDkyMDYzMSwiYXVkIjoiY2hhaW5yYW5rLWFwcCIsImlzcyI6ImNoYWlucmFuay1hcGkifQ.sV8S8eTD9GLO2XAfuxJUW6s7KVuYC_TpPx6PROh2J68"
+      "durationMs": 297,
+      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NTksIm5pcF9uaWRuIjoiRTJFMTc4MDg0NTg1Mjg2OSIsImVtYWlsIjoiZTJlLmRvc2VuLjE3ODA4NDU4NTI4NjlAY2hhaW5yYW5rLnRlc3QiLCJyb2xlIjoiZG9zZW4iLCJpYXQiOjE3ODA4NDU4NTMsImV4cCI6MTc4MDkzMjI1MywiYXVkIjoiY2hhaW5yYW5rLWFwcCIsImlzcyI6ImNoYWlucmFuay1hcGkifQ.SN85hE5lEk15LyMVVEpvfSHiPQycUMT2B5ffUyj5Y-4"
     },
     {
       "name": "Upload kegiatan #1 (jurnal internasional, 40 KUM, multipart PDF)",
       "status": "PASS",
-      "durationMs": 29,
-      "detail": "34a26a03-774b-42fc-a3da-6c9887711aeb -> id=34a26a03-774b-42fc-a3da-6c9887711aeb, poin_kum=40, status=belum_diverifikasi"
+      "durationMs": 45,
+      "detail": "ad9883ff-446a-4f31-b5e4-1cb81ef41baf -> id=ad9883ff-446a-4f31-b5e4-1cb81ef41baf, poin_kum=40, status=belum_diverifikasi"
     },
     {
       "name": "Upload kegiatan #2 (jurnal internasional, 40 KUM, multipart PDF)",
       "status": "PASS",
-      "durationMs": 15,
-      "detail": "b454c120-9856-4c59-8851-0d62b8622c4d -> id=b454c120-9856-4c59-8851-0d62b8622c4d, poin_kum=40, status=belum_diverifikasi"
+      "durationMs": 13,
+      "detail": "b6a2a139-44e4-4c87-bac9-98d9dc4178f9 -> id=b6a2a139-44e4-4c87-bac9-98d9dc4178f9, poin_kum=40, status=belum_diverifikasi"
     },
     {
       "name": "Upload kegiatan #3 (jurnal internasional, 40 KUM, multipart PDF)",
       "status": "PASS",
-      "durationMs": 160,
-      "detail": "07b60083-96da-4328-9406-4e57a1ebe130 -> id=07b60083-96da-4328-9406-4e57a1ebe130, poin_kum=40, status=belum_diverifikasi"
+      "durationMs": 14,
+      "detail": "851fe567-d6e5-4411-9cda-f1bd665a6f41 -> id=851fe567-d6e5-4411-9cda-f1bd665a6f41, poin_kum=40, status=belum_diverifikasi"
     },
     {
       "name": "Login as admin_sdm (verifier)",
       "status": "PASS",
-      "durationMs": 251,
-      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIsIm5pcF9uaWRuIjoiMTk4MDAxMDEyMDA1MDExMjIxIiwiZW1haWwiOiJkb2VAcHJpbWEuaXBiIiwicm9sZSI6ImFkbWluX3NkbSIsImlhdCI6MTc4MDgzNDIzMiwiZXhwIjoxNzgwOTIwNjMyLCJhdWQiOiJjaGFpbnJhbmstYXBwIiwiaXNzIjoiY2hhaW5yYW5rLWFwaSJ9.58mKBW9DItoTh5atZBHGhrKPmZy2g4V0zqZy6pJiP9g"
+      "durationMs": 263,
+      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIsIm5pcF9uaWRuIjoiMTk4MDAxMDEyMDA1MDExMjIxIiwiZW1haWwiOiJkb2VAcHJpbWEuaXBiIiwicm9sZSI6ImFkbWluX3NkbSIsImlhdCI6MTc4MDg0NTg1MywiZXhwIjoxNzgwOTMyMjUzLCJhdWQiOiJjaGFpbnJhbmstYXBwIiwiaXNzIjoiY2hhaW5yYW5rLWFwaSJ9.BMFRX_aRDuKEyr_bXf_hPD3LKBweBniY8XUzzA77aEQ"
     },
     {
       "name": "Verify kegiatan #1 (PUT .../verify) -> DB status + blockchain tx",
       "status": "PASS",
-      "durationMs": 2141,
-      "detail": "DB status=verified ✓, tx_id_fabric=52a0e1763738493d2f8e5919d72c02f4f9794aaa54bb452aab1ccbbd4a6caefc"
+      "durationMs": 2633,
+      "detail": "DB status=verified ✓, tx_id_fabric=c25e8564544dd9f50fcc4ccf1ae50b0b90218e7223efd082624bf14de1ee7abc"
     },
     {
       "name": "Verify kegiatan #2 (PUT .../verify) -> DB status + blockchain tx",
       "status": "PASS",
-      "durationMs": 2136,
-      "detail": "DB status=verified ✓, tx_id_fabric=1631cb5d8180149ce57bd61ada94bef729aa77e580efbc56ae63634665652fba"
+      "durationMs": 2152,
+      "detail": "DB status=verified ✓, tx_id_fabric=8214a0e4f59edf6f7b18134b87e0d28d7279bf29b7d89a9689dc21fac54508c6"
     },
     {
       "name": "Verify kegiatan #3 (PUT .../verify) -> DB status + blockchain tx",
       "status": "PASS",
-      "durationMs": 2098,
-      "detail": "DB status=verified ✓, tx_id_fabric=01084870ba1eb5cdd5bc56b3add92dee818e8a4e25deb4a644d46d069e9b5c6a"
+      "durationMs": 2118,
+      "detail": "DB status=verified ✓, tx_id_fabric=184a04effe27a4fd099bcb96a7073e3856b4b0eb38e3e6a4c66ea9b829590d6c"
     },
     {
       "name": "Re-login as dosen",
       "status": "PASS",
-      "durationMs": 245,
-      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NTgsIm5pcF9uaWRuIjoiRTJFMTc4MDgzNDIzMTM0OSIsImVtYWlsIjoiZTJlLmRvc2VuLjE3ODA4MzQyMzEzNDlAY2hhaW5yYW5rLnRlc3QiLCJyb2xlIjoiZG9zZW4iLCJpYXQiOjE3ODA4MzQyMzksImV4cCI6MTc4MDkyMDYzOSwiYXVkIjoiY2hhaW5yYW5rLWFwcCIsImlzcyI6ImNoYWlucmFuay1hcGkifQ.KdIdKHIK2j8nOSvA8fLk0tqCbsgdbFK7J797BiFO9yk"
+      "durationMs": 264,
+      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NTksIm5pcF9uaWRuIjoiRTJFMTc4MDg0NTg1Mjg2OSIsImVtYWlsIjoiZTJlLmRvc2VuLjE3ODA4NDU4NTI4NjlAY2hhaW5yYW5rLnRlc3QiLCJyb2xlIjoiZG9zZW4iLCJpYXQiOjE3ODA4NDU4NjEsImV4cCI6MTc4MDkzMjI2MSwiYXVkIjoiY2hhaW5yYW5rLWFwcCIsImlzcyI6ImNoYWlucmFuay1hcGkifQ.Pq2FUftzn37dEMCTuOXXQM3BZoPXtgdwcPxQ4m-RxpY"
     },
     {
       "name": "Submit usulan kenaikan pangkat (POST /usulan, target jabatan id=2)",
       "status": "PASS",
-      "durationMs": 2130,
-      "detail": "usulan id=bb5bb3cf-5e1b-4a65-a281-c189c9fb9f07, total_poin=120.00, kegiatan_count=3, jabatan Tenaga Pengajar -> Asisten Ahli, snapshot_hash=e46c464199116eac…"
+      "durationMs": 2142,
+      "detail": "usulan id=fa809221-10de-4dcc-b4ff-91a65160c1e6, total_poin=120.00, kegiatan_count=3, jabatan Tenaga Pengajar -> Asisten Ahli, snapshot_hash=a7ee0a48e18cf823…"
     },
     {
       "name": "Re-login as admin_sdm",
       "status": "PASS",
-      "durationMs": 247,
-      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIsIm5pcF9uaWRuIjoiMTk4MDAxMDEyMDA1MDExMjIxIiwiZW1haWwiOiJkb2VAcHJpbWEuaXBiIiwicm9sZSI6ImFkbWluX3NkbSIsImlhdCI6MTc4MDgzNDI0MSwiZXhwIjoxNzgwOTIwNjQxLCJhdWQiOiJjaGFpbnJhbmstYXBwIiwiaXNzIjoiY2hhaW5yYW5rLWFwaSJ9.7k1I5znamDLZsePibkTbjASHlI1E_HjoSrh6TQ_hLNY"
+      "durationMs": 263,
+      "detail": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIsIm5pcF9uaWRuIjoiMTk4MDAxMDEyMDA1MDExMjIxIiwiZW1haWwiOiJkb2VAcHJpbWEuaXBiIiwicm9sZSI6ImFkbWluX3NkbSIsImlhdCI6MTc4MDg0NTg2MywiZXhwIjoxNzgwOTMyMjYzLCJhdWQiOiJjaGFpbnJhbmstYXBwIiwiaXNzIjoiY2hhaW5yYW5rLWFwaSJ9.pzARSrQlpBE-mNQdQNcRepTvaJzdpPhVHTPhcbSu7Wc"
     },
     {
       "name": "Process usulan (PUT .../proses) -> status diproses + lock kegiatan",
       "status": "PASS",
-      "durationMs": 2111,
+      "durationMs": 2114,
       "detail": "status=diproses, kegiatan_locked=3"
     },
     {
       "name": "Issue SK (PUT .../terbitkan-sk, multipart PDF) -> finalize promotion",
       "status": "PASS",
-      "durationMs": 2114,
-      "detail": "status=sk_issued, jabatan_baru=Asisten Ahli, sk_number=SK-E2E-1780834231349/UN.00/2026"
+      "durationMs": 2146,
+      "detail": "status=sk_issued, jabatan_baru=Asisten Ahli, sk_number=SK-E2E-1780845852869/UN.00/2026"
     },
     {
       "name": "Check SK transaction recorded on blockchain (GET /usulan/:id)",
       "status": "PASS",
-      "durationMs": 5,
-      "detail": "status=sk_issued ✓, sk_document_hash=ea1cd4fb8b5dcf76…, tx_id_fabric=ab594b9c17281f0e5be7fec3bbc4ec2eef12b1a57282f61febc7826f10299268"
+      "durationMs": 6,
+      "detail": "status=sk_issued ✓, sk_document_hash=4d26fb779ab72c13…, tx_id_fabric=5710373c493df917fb245b1c91d017eb340a3406891efbb4cddb9a5269af8c6b"
     },
     {
       "name": "Validate on-chain integrity (GET /usulan/:id/validate-blockchain)",
       "status": "PASS",
-      "durationMs": 41,
+      "durationMs": 60,
       "detail": "HTTP 200, valid=true, blockchainEnabled=true, recordExists=true, skHashMatches=true, snapshotHashMatches=true"
     },
     {
       "name": "Fetch kegiatan audit trail (GET /kegiatan/:id/audit)",
       "status": "PASS",
-      "durationMs": 7,
+      "durationMs": 8,
       "detail": "2 entries: [VERIFY -> CREATE]"
     },
     {
       "name": "Fetch usulan audit trail (GET /usulan/:id/audit)",
       "status": "PASS",
-      "durationMs": 39,
+      "durationMs": 45,
       "detail": "response keys=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]"
     },
     {
       "name": "Check /system/status reflects live blockchain connection",
       "status": "PASS",
-      "durationMs": 3,
-      "detail": "enabled=true, connected=true, identity=appUser, channel=skchannel, chaincode=chainrank, connectedAt=2026-06-07T12:10:16.123Z"
+      "durationMs": 4,
+      "detail": "enabled=true, connected=true, identity=appUser, channel=skchannel, chaincode=chainrank, connectedAt=2026-06-07T15:24:14.141Z"
     }
   ]
 }

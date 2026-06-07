@@ -871,14 +871,24 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     // Record usulan creation on blockchain. The chaincode's lifecycle expects
     // AjukanUsulanKenaikanPangkat to run first -- without it, TerbitkanSkKenaikanPangkat
     // later fails with "Usulan does not exist".
+    //
+    // blockchainStatus distinguishes 'skipped' (Fabric disabled -- nothing was
+    // attempted) from 'failed' (Fabric enabled, attempted, returned no txId).
+    // This matters because tx_id_fabric is reused across this usulan's later
+    // lifecycle stages (proses/terbitkan-sk) -- a failed write here leaves the
+    // column at its previous (NULL) value, and a generic 'skipped' would be
+    // indistinguishable from "Fabric is simply turned off" in the audit trail.
     let blockchainTxId = null;
+    let blockchainStatus = 'skipped';
     if (fabricClient.isFabricEnabled()) {
+      blockchainStatus = 'failed';
       try {
         const hashNIP = crypto.createHash('sha256').update(dosenNipNidn).digest('hex');
         blockchainTxId = await fabricClient.recordUsulanCreation(
           usulan.id, hashNIP, totalPoin, targetJabatan.nama, referensi_id || null, snapshotHash
         );
         if (blockchainTxId) {
+          blockchainStatus = 'success';
           await client.query(
             `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
             [blockchainTxId, usulan.id]
@@ -899,7 +909,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
         total_poin: totalPoin,
         kegiatan_count: kegiatanList.length,
         snapshot_hash: snapshotHash,
-        blockchain_tx: blockchainTxId ? 'success' : 'skipped',
+        blockchain_tx: blockchainStatus,
       })]
     );
 
@@ -973,11 +983,19 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
     // Record status transition (pending -> diproses) on blockchain. The
     // chaincode requires this before TerbitkanSkKenaikanPangkat will accept
     // the usulan (it checks status === 'diproses').
+    //
+    // See the creation handler above for why blockchainStatus distinguishes
+    // 'skipped' from 'failed' -- a failed write here leaves tx_id_fabric at
+    // the creation-stage txId, which would otherwise be indistinguishable
+    // from a successful 'diproses' recording in the audit trail.
     let blockchainTxId = null;
+    let blockchainStatus = 'skipped';
     if (fabricClient.isFabricEnabled()) {
+      blockchainStatus = 'failed';
       try {
         blockchainTxId = await fabricClient.recordUsulanProcess(req.params.id, req.user.id);
         if (blockchainTxId) {
+          blockchainStatus = 'success';
           await pool.query(
             `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
             [blockchainTxId, req.params.id]
@@ -995,7 +1013,7 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
         status: 'diproses',
         kegiatan_locked: lockResult.rowCount,
-        blockchain_tx: blockchainTxId ? 'success' : 'skipped',
+        blockchain_tx: blockchainStatus,
       })]
     );
 
@@ -1069,17 +1087,40 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
       [req.params.id]
     );
 
-    // Blockchain recording removed - rejected usulan should not be in blockchain
-    // Only approved/final usulan (SK issued) will be recorded
+    // Record rejection on blockchain. Now that AjukanUsulanKenaikanPangkat
+    // runs at submission time, every usulan exists on-chain at 'pending' (or
+    // 'diproses'); leaving it there forever on rejection would make the
+    // on-chain record permanently disagree with the DB ('rejected'). The
+    // chaincode's TolakUsulanKenaikanPangkat accepts both of those statuses
+    // (see kegiatanContract.js _checkRole-gated state machine), so this is
+    // safe to call regardless of whether /proses ran first.
+    let blockchainTxId = null;
+    let blockchainStatus = 'skipped';
+    if (fabricClient.isFabricEnabled()) {
+      blockchainStatus = 'failed';
+      try {
+        blockchainTxId = await fabricClient.recordUsulanRejection(req.params.id, req.user.id, catatan_penolakan);
+        if (blockchainTxId) {
+          blockchainStatus = 'success';
+          await pool.query(
+            `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+            [blockchainTxId, req.params.id]
+          );
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
 
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'REJECT', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'rejected', 
-        catatan_penolakan, 
+        status: 'rejected',
+        catatan_penolakan,
         kegiatan_unlocked: unlockResult.rowCount,
+        blockchain_tx: blockchainStatus,
       })]
     );
 
@@ -1221,12 +1262,20 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     }
 
     // Record SK issuance to blockchain (final lifecycle event for this usulan;
-    // AjukanUsulanKenaikanPangkat was already recorded when the usulan was submitted)
+    // AjukanUsulanKenaikanPangkat was already recorded when the usulan was submitted).
+    //
+    // blockchainStatus distinguishes 'skipped'/'failed'/'success' explicitly --
+    // see the creation handler's comment for why this matters: tx_id_fabric
+    // already holds the 'diproses'-stage txId at this point, so a failed SK
+    // issuance leaves it populated with a *different* (stale) transaction,
+    // which previously made a failed issuance indistinguishable from a
+    // successful one when read back from the audit trail alone.
     const txResult = await fabricClient.recordUsulanSKIssued(
       req.params.id,
       sk_document_hash || 'no-document',
       req.user.id
     );
+    const blockchainStatus = !fabricClient.isFabricEnabled() ? 'skipped' : (txResult ? 'success' : 'failed');
     if (txResult) {
       await Usulan.updateBlockchainTx(req.params.id, txResult);
     }
@@ -1241,7 +1290,7 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
         sk_document_hash,
         jabatan_updated: usulan.jabatan_tujuan_nama,
         kegiatan_locked: true,
-        blockchain_tx: txResult ? 'success' : 'skipped',
+        blockchain_tx: blockchainStatus,
       })]
     );
 

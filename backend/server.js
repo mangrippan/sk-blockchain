@@ -10,6 +10,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const { pool, testConnection } = require('./config/database');
 const fabricClient = require('./utils/fabricClient');
+const blockchainReconciliation = require('./utils/blockchainReconciliation');
 
 // ============================================
 // ENVIRONMENT VARIABLE VALIDATION
@@ -201,6 +202,7 @@ async function startServer() {
     // Connect to Fabric network (non-blocking)
     if (fabricClient.isFabricEnabled()) {
       await fabricClient.connectGateway();
+      blockchainReconciliation.startReconciliationJob();
     } else {
       console.log('ℹ️  Blockchain integration disabled (set FABRIC_ENABLED=true to enable)');
     }
@@ -238,6 +240,7 @@ async function gracefulShutdown(signal) {
     });
   }
   try {
+    blockchainReconciliation.stopReconciliationJob();
     await fabricClient.disconnectGateway();
     await pool.end();
     console.log('🗄️  Database pool closed');

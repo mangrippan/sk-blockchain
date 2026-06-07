@@ -33,6 +33,15 @@ let lastSuccessAt = null;
 let lastFailureAt = null;
 let lastError = null; // { message, code, at } — kept short, exposed via /system/status
 
+// Periodic background probe so lastSuccessAt/lastFailureAt stay fresh even
+// when no real user-triggered transaction has run recently -- this is what
+// closes the gap where /system/status reported connected:true for >19 hours
+// while every actual write silently failed (lastSuccessAt was simply never
+// updated because nothing had been attempted since the last real success).
+const LIVENESS_PROBE_INTERVAL_MS = parseInt(process.env.FABRIC_LIVENESS_INTERVAL_MS || '60000', 10);
+const LIVENESS_STALE_THRESHOLD_MS = LIVENESS_PROBE_INTERVAL_MS * 3;
+let livenessIntervalHandle = null;
+
 /**
  * Check if Fabric integration is enabled
  */
@@ -109,6 +118,7 @@ async function connectGateway() {
 
     connectedIdentity = identityName;
     connectedAt = new Date().toISOString();
+    startLivenessProbe();
     console.log(`✅ Connected to Fabric network as ${identityName} (contract: KegiatanContract)`);
     return contract;
   } catch (error) {
@@ -125,13 +135,48 @@ async function connectGateway() {
  * Disconnect from Fabric network
  */
 /**
+ * Periodically exercise a real peer round-trip (independent of whatever user
+ * traffic is or isn't flowing) so lastSuccessAt/lastFailureAt/lastError never
+ * go stale. KegiatanExists() is used as the probe target because it's a plain
+ * getState() lookup that resolves to true/false and never throws "not found"
+ * -- any outcome other than a clean resolve means the peer round-trip itself
+ * is broken, which is exactly the liveness signal we want.
+ */
+function startLivenessProbe() {
+  if (!FABRIC_ENABLED || livenessIntervalHandle) return;
+  livenessIntervalHandle = setInterval(() => {
+    evaluateTransaction('KegiatanExists', '__liveness_probe__').catch(() => {});
+  }, LIVENESS_PROBE_INTERVAL_MS);
+  // Don't let the probe keep the process alive on its own.
+  if (typeof livenessIntervalHandle.unref === 'function') {
+    livenessIntervalHandle.unref();
+  }
+}
+
+function stopLivenessProbe() {
+  if (livenessIntervalHandle) {
+    clearInterval(livenessIntervalHandle);
+    livenessIntervalHandle = null;
+  }
+}
+
+/**
  * Get current Fabric connection status
  */
 function getConnectionStatus() {
-  // "Operational" means the most recent real transaction attempt succeeded —
-  // not merely that gateway/contract objects are cached. If no transaction has
-  // been attempted yet since startup, we don't claim to be connected.
-  const operational = lastSuccessAt !== null &&
+  // "Connected" requires three independent signals to agree right now:
+  //   1. gateway/contract objects are cached (cheap, but stays non-null even
+  //      after the underlying peer connection has gone stale -- insufficient
+  //      on its own, see Finding #1 in docs/E2E_TEST_REPORT.md)
+  //   2. the most recent real transaction attempt succeeded, AND
+  //   3. that success is RECENT -- not just "happened at some point since
+  //      startup". The periodic liveness probe (see startLivenessProbe)
+  //      guarantees a real attempt lands at least every LIVENESS_PROBE_INTERVAL_MS,
+  //      so a stale lastSuccessAt now means the chain itself stopped responding,
+  //      not merely that nobody happened to submit a transaction recently.
+  const successAgeMs = lastSuccessAt !== null ? (Date.now() - new Date(lastSuccessAt).getTime()) : Infinity;
+  const recentlySuccessful = successAgeMs < LIVENESS_STALE_THRESHOLD_MS;
+  const operational = recentlySuccessful &&
     (lastFailureAt === null || lastSuccessAt > lastFailureAt);
   return {
     enabled: FABRIC_ENABLED,
@@ -143,10 +188,12 @@ function getConnectionStatus() {
     lastSuccessAt,
     lastFailureAt,
     lastError,
+    livenessProbeIntervalMs: LIVENESS_PROBE_INTERVAL_MS,
   };
 }
 
 async function disconnectGateway() {
+  stopLivenessProbe();
   if (gateway) {
     await gateway.disconnect();
     gateway = null;
