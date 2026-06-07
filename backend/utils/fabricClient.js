@@ -145,7 +145,7 @@ async function connectGateway() {
 function startLivenessProbe() {
   if (!FABRIC_ENABLED || livenessIntervalHandle) return;
   livenessIntervalHandle = setInterval(() => {
-    evaluateTransaction('KegiatanExists', '__liveness_probe__').catch(() => {});
+    evaluateTransaction('KegiatanExists', 'liveness-probe-key').catch(() => {});
   }, LIVENESS_PROBE_INTERVAL_MS);
   // Don't let the probe keep the process alive on its own.
   if (typeof livenessIntervalHandle.unref === 'function') {
@@ -280,6 +280,27 @@ async function evaluateTransaction(functionName, ...args) {
     lastSuccessAt = new Date().toISOString();
     return result.toString();
   } catch (error) {
+    // fabric-network's SingleQueryHandler distinguishes two failure shapes:
+    //  - a peer actually responded to the proposal, but the chaincode itself
+    //    returned an error (e.g. "Usulan X does not exist") -- the SDK throws
+    //    `Object.assign(new Error(...), peerResponse)`, which carries the
+    //    peer response's own `isEndorsed: false` / `status` / `payload` props
+    //  - no peer could be reached/respond at all -- the SDK throws a plain
+    //    FabricError ("Query failed. Errors: ...") with none of those props
+    // Only the second case is an actual connectivity problem.
+    const isChaincodeResponseError = Object.prototype.hasOwnProperty.call(error, 'isEndorsed')
+      && error.isEndorsed === false;
+
+    if (isChaincodeResponseError) {
+      // The network is healthy and answered correctly -- the chaincode just
+      // returned a normal application-level error (e.g. "not found" for a
+      // ledger key that was never written, perhaps because the on-chain
+      // write failed at creation time, or a stale/garbage ID was queried).
+      // Don't tear down the gateway or pollute lastError with it.
+      console.warn(`⚠️  Fabric evaluateTransaction(${functionName}) chaincode error (not a connectivity issue):`, error.message);
+      lastSuccessAt = new Date().toISOString();
+      return null;
+    }
     console.error(`❌ Fabric evaluateTransaction(${functionName}) failed:`, error.message);
     await handleTransactionFailure(error);
     return null;

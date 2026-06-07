@@ -1,63 +1,88 @@
 # ============================================
 # ChainRank - Stop All Services
+# Usage: .\stop-all.ps1 [-Hard]
+#   (default) SOFT stop  : pauses Fabric, KEEPS all data (ledger + CouchDB)
+#   -Hard               : full teardown, REMOVES volumes (wipes ledger+CouchDB)
 # ============================================
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  ChainRank - Stopping All Services" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+param(
+    [switch]$Hard
+)
 
 $ErrorActionPreference = "Continue"
+$PROJECT_ROOT = $PSScriptRoot
 
-# 1. Stop Chaincode Containers (CCAAS)
-Write-Host "[1/3] Stopping Chaincode Containers..." -ForegroundColor Yellow
-$chaincodeContainers = docker ps -q --filter "name=chainrank.org"
-if ($chaincodeContainers) {
-    docker stop $chaincodeContainers
-    docker rm $chaincodeContainers
-    Write-Host "Chaincode containers stopped" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
+if ($Hard) {
+    Write-Host "  ChainRank - Stopping (HARD / wipe data)" -ForegroundColor Cyan
 } else {
-    Write-Host "No chaincode containers running" -ForegroundColor Gray
+    Write-Host "  ChainRank - Stopping (soft / keep data)" -ForegroundColor Cyan
 }
+Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 2. Stop Fabric Network
-Write-Host "[2/3] Stopping Hyperledger Fabric Network..." -ForegroundColor Yellow
-Set-Location -Path "fabric-network"
-
-if (Test-Path ".\stop-network.ps1") {
-    .\stop-network.ps1
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Fabric network stopped successfully" -ForegroundColor Green
-    } else {
-        Write-Host "Failed to stop Fabric network" -ForegroundColor Red
+# ─────────────────────────────────────────────
+# 1. Stop Backend & Frontend dev servers (ports 3000 / 5173)
+# ─────────────────────────────────────────────
+Write-Host "[1/4] Stopping Backend & Frontend..." -ForegroundColor Yellow
+foreach ($port in @(3000, 5173)) {
+    $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    foreach ($c in $conns) {
+        try {
+            Stop-Process -Id $c.OwningProcess -Force -ErrorAction Stop
+            Write-Host "  Stopped process on port $port (PID $($c.OwningProcess))" -ForegroundColor Gray
+        } catch {}
     }
-} else {
-    Write-Host "stop-network.ps1 not found in fabric-network folder" -ForegroundColor Red
 }
-
-Set-Location -Path ".."
+# Backend runs inside WSL via `npm start`; make sure the WSL node process is gone
+wsl -d Ubuntu -- bash -c "pkill -f 'node server.js' 2>/dev/null; true" 2>$null | Out-Null
+Write-Host "  Backend/Frontend stopped" -ForegroundColor Green
 Write-Host ""
 
-# 3. Stop Database
-Write-Host "[3/3] Stopping PostgreSQL Database..." -ForegroundColor Yellow
-docker compose -f docker-compose.dev.yml down
-
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Database stopped successfully" -ForegroundColor Green
+# ─────────────────────────────────────────────
+# 2. Fabric network
+# ─────────────────────────────────────────────
+if ($Hard) {
+    Write-Host "[2/4] Tearing down Fabric Network (removing volumes)..." -ForegroundColor Yellow
+    $chaincodeContainers = docker ps -aq --filter "name=chainrank.org"
+    if ($chaincodeContainers) { docker rm -f $chaincodeContainers 2>$null | Out-Null }
+    & "$PROJECT_ROOT\fabric-network\stop-network.ps1"
+    Write-Host "  Fabric network torn down (data wiped)" -ForegroundColor Green
 } else {
-    Write-Host "Failed to stop database" -ForegroundColor Red
+    Write-Host "[2/4] Pausing Fabric Network (data preserved)..." -ForegroundColor Yellow
+    & "$PROJECT_ROOT\fabric-network\pause-network.ps1"
 }
+Write-Host ""
 
+# ─────────────────────────────────────────────
+# 3. PostgreSQL Database
+# ─────────────────────────────────────────────
+if ($Hard) {
+    Write-Host "[3/4] Stopping & removing PostgreSQL..." -ForegroundColor Yellow
+    docker compose -f "$PROJECT_ROOT\docker-compose.dev.yml" down 2>$null | Out-Null
+    Write-Host "  Database container removed (named volume kept unless -v)" -ForegroundColor Green
+} else {
+    Write-Host "[3/4] Pausing PostgreSQL (data preserved)..." -ForegroundColor Yellow
+    docker stop chainrank_postgres_dev 2>$null | Out-Null
+    Write-Host "  Database stopped (volume preserved)" -ForegroundColor Green
+}
+Write-Host ""
+
+# ─────────────────────────────────────────────
+# 4. Done
+# ─────────────────────────────────────────────
+Write-Host "[4/4] Done." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  All Services Stopped!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Note: Backend and Frontend terminals may still be open." -ForegroundColor Yellow
-Write-Host "Please close them manually or press Ctrl+C in each terminal." -ForegroundColor Yellow
-Write-Host ""
-Write-Host "To delete all data (reset database), run:" -ForegroundColor Gray
-Write-Host "  docker compose -f docker-compose.dev.yml down -v" -ForegroundColor Cyan
+if ($Hard) {
+    Write-Host "Hard stop: ledger + CouchDB data were removed." -ForegroundColor Yellow
+    Write-Host "Next start will rebuild from scratch: .\run.ps1" -ForegroundColor Gray
+} else {
+    Write-Host "Soft stop: all data preserved (ledger + CouchDB + DB)." -ForegroundColor Green
+    Write-Host "Next start resumes instantly: .\run.ps1" -ForegroundColor Gray
+    Write-Host "To wipe everything instead, run: .\stop-all.ps1 -Hard" -ForegroundColor DarkGray
+}
 Write-Host ""
