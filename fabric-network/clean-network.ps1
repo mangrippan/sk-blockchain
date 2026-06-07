@@ -34,7 +34,7 @@ Write-Host ""
 
 # Step 2: Remove all Fabric containers
 Write-Host "Step 2: Removing Fabric containers..." -ForegroundColor Yellow
-docker ps -a --format "{{.Names}}" | Select-String -Pattern "peer|orderer|ca_|chainrank" | ForEach-Object {
+docker ps -a --format "{{.Names}}" | Select-String -Pattern "peer|orderer|ca_|prima" | ForEach-Object {
     $containerName = $_.ToString()
     Write-Host "  Removing container: $containerName" -ForegroundColor Gray
     docker rm -f $containerName 2>$null
@@ -56,7 +56,7 @@ Write-Host ""
 Write-Host "Step 4: Cleaning up local artifacts..." -ForegroundColor Yellow
 
 # Remove chaincode package
-$packageFile = Join-Path $SCRIPT_DIR "chainrank_ccaas.tar.gz"
+$packageFile = Join-Path $SCRIPT_DIR "prima_ccaas.tar.gz"
 if (Test-Path $packageFile) {
     Remove-Item $packageFile -Force
     Write-Host "  Removed chaincode package" -ForegroundColor Gray
@@ -92,5 +92,5 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Run: .\start-network-ccaas.ps1" -ForegroundColor White
 Write-Host "  2. Run: node ..\backend\enroll-wallet.js" -ForegroundColor White
-Write-Host "  3. Restart backend: pm2 restart chainrank-backend" -ForegroundColor White
+Write-Host "  3. Restart backend: pm2 restart prima-backend" -ForegroundColor White
 Write-Host ""

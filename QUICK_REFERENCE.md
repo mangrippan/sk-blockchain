@@ -1,4 +1,4 @@
-# ChainRank - Quick Reference
+# Prima - Quick Reference
 
 ## Menjalankan Project
 
@@ -27,7 +27,7 @@ wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangk
 wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend && node enroll-wallet.js"
 
 # 3. Restart backend agar pakai wallet baru
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend && pm2 restart chainrank-backend"
+wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend && pm2 restart prima-backend"
 ```
 
 ### Stop Semua
@@ -55,8 +55,8 @@ cd fabric-network
 ```bash
 # Di WSL Ubuntu terminal:
 cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
-pm2 start server.js --name chainrank-backend
-pm2 logs chainrank-backend
+pm2 start server.js --name prima-backend
+pm2 logs prima-backend
 ```
 
 ### Frontend
@@ -86,7 +86,7 @@ npm run dev
 | `budi.santoso@prima.ipb` | `admin123` | Dosen |
 | `ani.wijaya@prima.ipb` | `admin123` | Dosen |
 | `ahmad.dahlan@prima.ipb` | `admin123` | Pimpinan |
-| `sdm@chainrank.test` | `admin123` | Admin SDM |
+| `sdm@prima.test` | `admin123` | Admin SDM |
 
 ---
 
@@ -94,7 +94,7 @@ npm run dev
 
 ### Cek via Database
 ```powershell
-docker exec chainrank_postgres_dev psql -U postgres -d chainrank_db -c "SELECT id, tx_id_fabric, status FROM sk.kegiatan_dosen ORDER BY created_at DESC LIMIT 5;"
+docker exec prima_postgres_dev psql -U postgres -d prima_db -c "SELECT id, tx_id_fabric, status FROM sk.kegiatan_dosen ORDER BY created_at DESC LIMIT 5;"
 ```
 
 Jika `tx_id_fabric` terisi → blockchain recording berhasil.
@@ -104,7 +104,7 @@ Jika `tx_id_fabric` terisi → blockchain recording berhasil.
 # Di WSL
 cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/fabric-network/fabric-samples/test-network
 . scripts/envVar.sh && setGlobals 1
-peer chaincode query -C skchannel -n chainrank -c '{"function":"KegiatanContract:GetAllKegiatan","Args":[]}'
+peer chaincode query -C primachannel -n prima -c '{"function":"KegiatanContract:GetAllKegiatan","Args":[]}'
 ```
 
 ### Test Direct (tanpa API)
@@ -122,7 +122,7 @@ node test-fabric-direct.js
 # Pastikan wallet sudah di-refresh setelah network restart:
 cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
 node enroll-wallet.js
-pm2 restart chainrank-backend
+pm2 restart prima-backend
 ```
 
 ### Chaincode belum committed
@@ -155,8 +155,8 @@ docker compose -f docker-compose.dev.yml up -d
                                         └───────────────────┘
 ```
 
-- **Channel:** skchannel
-- **Chaincode:** chainrank (KegiatanContract)
+- **Channel:** primachannel
+- **Chaincode:** prima (KegiatanContract)
 - **Endorsement Policy:** OR('Org1MSP.peer','Org2MSP.peer')
 - **State DB:** CouchDB
 - **SDK:** fabric-network v2.2.20 (discovery disabled, static endorsement)

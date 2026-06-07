@@ -1,9 +1,9 @@
 # ============================================
-# ChainRank - Start All Services
+# Prima - Start All Services
 # ============================================
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  ChainRank - Starting All Services" -ForegroundColor Cyan
+Write-Host "  Prima - Starting All Services" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -79,7 +79,7 @@ if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq "1") {
     Write-Host "    Backend will run at: http://localhost:3000" -ForegroundColor Cyan
     
     # Start backend in WSL (new terminal)
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-Host 'ChainRank Backend Server (WSL)' -ForegroundColor Green; Write-Host 'API: http://localhost:3000' -ForegroundColor Cyan; Write-Host 'Swagger: http://localhost:3000/api-docs' -ForegroundColor Cyan; Write-Host ''; .\start-backend-wsl.ps1"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-Host 'Prima Backend Server (WSL)' -ForegroundColor Green; Write-Host 'API: http://localhost:3000' -ForegroundColor Cyan; Write-Host 'Swagger: http://localhost:3000/api-docs' -ForegroundColor Cyan; Write-Host ''; .\start-backend-wsl.ps1"
     
     Write-Host "Backend terminal opened (WSL mode)" -ForegroundColor Green
 } else {
@@ -87,7 +87,7 @@ if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq "1") {
     Write-Host "    Backend will run at: http://localhost:3000" -ForegroundColor Cyan
     
     # Start backend in Windows (new terminal)
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\backend'; Write-Host 'ChainRank Backend Server (Windows)' -ForegroundColor Green; Write-Host 'API: http://localhost:3000' -ForegroundColor Cyan; Write-Host 'Swagger: http://localhost:3000/api-docs' -ForegroundColor Cyan; Write-Host 'Note: Fabric integration disabled in Windows mode' -ForegroundColor Yellow; Write-Host ''; npm start"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\backend'; Write-Host 'Prima Backend Server (Windows)' -ForegroundColor Green; Write-Host 'API: http://localhost:3000' -ForegroundColor Cyan; Write-Host 'Swagger: http://localhost:3000/api-docs' -ForegroundColor Cyan; Write-Host 'Note: Fabric integration disabled in Windows mode' -ForegroundColor Yellow; Write-Host ''; npm start"
     
     Write-Host "Backend terminal opened (Windows mode)" -ForegroundColor Green
 }
@@ -111,7 +111,7 @@ Write-Host "    Starting frontend server in new terminal..." -ForegroundColor Gr
 Write-Host "    Frontend will run at: http://localhost:5173" -ForegroundColor Cyan
 
 # Start frontend in new PowerShell window
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\frontend'; Write-Host 'ChainRank Frontend (Vue.js)' -ForegroundColor Green; Write-Host 'URL: http://localhost:5173' -ForegroundColor Cyan; Write-Host ''; npm run dev"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\frontend'; Write-Host 'Prima Frontend (Vue.js)' -ForegroundColor Green; Write-Host 'URL: http://localhost:5173' -ForegroundColor Cyan; Write-Host ''; npm run dev"
 
 Write-Host "Frontend terminal opened" -ForegroundColor Green
 
@@ -132,11 +132,11 @@ Write-Host "  - CouchDB Org2: http://localhost:7984/_utils (admin/adminpw)" -For
 Write-Host "  - Chaincode: CCAAS method (external containers)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Default Login:" -ForegroundColor White
-Write-Host "  - Email:      admin@chainrank.test" -ForegroundColor Gray
+Write-Host "  - Email:      admin@prima.test" -ForegroundColor Gray
 Write-Host "  - Password:   password123" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Verify chaincode containers:" -ForegroundColor White
-Write-Host "  docker ps --filter 'name=chainrank'" -ForegroundColor Gray
+Write-Host "  docker ps --filter 'name=prima'" -ForegroundColor Gray
 Write-Host ""
 Write-Host "To stop all services, run: .\stop-all.ps1" -ForegroundColor Yellow
 Write-Host ""

@@ -1,4 +1,4 @@
-# ChainRank - Panduan Menjalankan Sistem
+# Prima - Panduan Menjalankan Sistem
 
 ## Quick Start
 
@@ -51,14 +51,14 @@ cd fabric-network
 .\stop-network.ps1
 
 # Stop database
-docker stop chainrank_postgres_dev
+docker stop prima_postgres_dev
 ```
 
 ---
 
 ## Troubleshooting
 
-### Error: "ledger [skchannel] already exists"
+### Error: "ledger [primachannel] already exists"
 
 ```powershell
 .\run.ps1 -Clean
@@ -108,7 +108,7 @@ Pastikan backend sudah running di port 3000 sebelum frontend. Script `run.ps1` s
 │   Vue.js        │     │   Express.js     │     │   - peer0.org1             │
 │   Port 5173     │     │   Port 3000      │     │   - peer0.org2             │
 └─────────────────┘     └────────┬─────────┘     │   - orderer                │
-                                 │               │   - chainrank (chaincode)   │
+                                 │               │   - prima (chaincode)   │
                         ┌────────▼─────────┐     └────────────────────────────┘
                         │   PostgreSQL     │
                         │   Port 5434      │

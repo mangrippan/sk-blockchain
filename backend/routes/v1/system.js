@@ -55,10 +55,10 @@ const { auth } = require('../../middleware/auth');
  *                       example: appUser
  *                     channel:
  *                       type: string
- *                       example: skchannel
+ *                       example: primachannel
  *                     chaincode:
  *                       type: string
- *                       example: chainrank
+ *                       example: prima
  *                     connectedAt:
  *                       type: string
  *                       format: date-time

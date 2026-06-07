@@ -25,8 +25,8 @@ $coreContainers = @(
     'ca_orderer'
 )
 $chaincodeContainers = @(
-    'chainrank.org1.example.com',
-    'chainrank.org2.example.com'
+    'prima.org1.example.com',
+    'prima.org2.example.com'
 )
 
 Write-Host "Pausing Fabric network (data preserved)..." -ForegroundColor Yellow

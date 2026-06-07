@@ -12,8 +12,8 @@ const path = require('path');
 const fs = require('fs');
 
 // Configuration
-const CHANNEL_NAME = process.env.FABRIC_CHANNEL || 'skchannel';
-const CHAINCODE_NAME = process.env.FABRIC_CHAINCODE || 'chainrank';
+const CHANNEL_NAME = process.env.FABRIC_CHANNEL || 'primachannel';
+const CHAINCODE_NAME = process.env.FABRIC_CHAINCODE || 'prima';
 const FABRIC_ENABLED = process.env.FABRIC_ENABLED === 'true';
 const CONNECTION_PROFILE_PATH = process.env.FABRIC_CONNECTION_PROFILE || 
   path.resolve(__dirname, '../../fabric-config/connection-org1.json');

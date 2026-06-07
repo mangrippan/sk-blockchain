@@ -9,8 +9,8 @@ $ErrorActionPreference = "Continue"
 $SCRIPT_DIR = $PSScriptRoot
 $PROJECT_ROOT = Split-Path $SCRIPT_DIR -Parent
 $CHAINCODE_PATH = Join-Path $PROJECT_ROOT "chaincode"
-$CHANNEL_NAME = "skchannel"
-$CHAINCODE_NAME = "chainrank"
+$CHANNEL_NAME = "primachannel"
+$CHAINCODE_NAME = "prima"
 $CHAINCODE_VERSION = "1.0"
 $CHAINCODE_PORT = 9999
 
@@ -164,9 +164,9 @@ try {
     $packageId = ($packages.installed_chaincodes | Where-Object { $_.label -eq $expectedLabel }).package_id
 } catch {
     # Fallback: parse manually from output
-    $packageId = $queryResult | Select-String -Pattern "chainrank_1.0:([a-f0-9]{64})" | ForEach-Object { $_.Matches.Groups[1].Value }
+    $packageId = $queryResult | Select-String -Pattern "prima_1.0:([a-f0-9]{64})" | ForEach-Object { $_.Matches.Groups[1].Value }
     if ($packageId) {
-        $packageId = "chainrank_1.0:$packageId"
+        $packageId = "prima_1.0:$packageId"
     }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Date Formatting Utilities for ChainRank
+ * Date Formatting Utilities for Prima
  * 
  * Handles both:
  * 1. ISO date strings (from PostgreSQL)

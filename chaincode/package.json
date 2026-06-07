@@ -1,7 +1,7 @@
 {
-  "name": "chainrank-chaincode",
+  "name": "prima-chaincode",
   "version": "1.0.0",
-  "description": "ChainRank - Kegiatan Dosen Chaincode for Hyperledger Fabric",
+  "description": "Prima - Kegiatan Dosen Chaincode for Hyperledger Fabric",
   "main": "index.js",
   "scripts": {
     "start": "fabric-chaincode-node server --chaincode-address=$CHAINCODE_SERVER_ADDRESS --chaincode-id=$CORE_CHAINCODE_ID_NAME",

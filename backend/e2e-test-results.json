@@ -1,9 +1,9 @@
 {
-  "project": "ChainRank — Sistem Usulan Kenaikan Pangkat Blockchain",
+  "project": "Prima — Sistem Usulan Kenaikan Pangkat Blockchain",
   "runAt": "2026-06-07T15:24:27.911Z",
   "baseUrl": "http://localhost:3000/api/v1",
   "testAccount": {
-    "email": "e2e.dosen.1780845852869@chainrank.test",
+    "email": "e2e.dosen.1780845852869@prima.test",
     "nip": "E2E1780845852869",
     "generatedId": 59
   },
@@ -41,7 +41,7 @@
       "name": "Register new dosen account (POST /auth/register)",
       "status": "PASS",
       "durationMs": 366,
-      "detail": "created user id=59, email=e2e.dosen.1780845852869@chainrank.test, role=dosen"
+      "detail": "created user id=59, email=e2e.dosen.1780845852869@prima.test, role=dosen"
     },
     {
       "name": "Login as dosen (new account)",
@@ -149,7 +149,7 @@
       "name": "Check /system/status reflects live blockchain connection",
       "status": "PASS",
       "durationMs": 4,
-      "detail": "enabled=true, connected=true, identity=appUser, channel=skchannel, chaincode=chainrank, connectedAt=2026-06-07T15:24:14.141Z"
+      "detail": "enabled=true, connected=true, identity=appUser, channel=primachannel, chaincode=prima, connectedAt=2026-06-07T15:24:14.141Z"
     }
   ]
 }

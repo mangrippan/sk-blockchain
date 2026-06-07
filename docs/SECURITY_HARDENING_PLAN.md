@@ -89,8 +89,8 @@ Berdasarkan audit keamanan proyek Usulan Kenaikan Pangkat Blockchain.
 ```javascript
 jwt.verify(token, secret, {
   algorithms: ['HS256'],
-  issuer: 'chainrank-api',
-  audience: 'chainrank-app',
+  issuer: 'prima-api',
+  audience: 'prima-app',
 });
 ```
 

@@ -1,4 +1,4 @@
-# Outline Slide Presentasi - ChainRank
+# Outline Slide Presentasi - Prima
 ## Sistem Kenaikan Pangkat Dosen Berbasis Blockchain
 
 **Durasi**: 15-20 menit
@@ -7,7 +7,7 @@
 ---
 
 ## SLIDE 1: Title Slide
-**ChainRank**
+**Prima**
 ### Sistem Kenaikan Pangkat Dosen Berbasis Blockchain Menggunakan Hyperledger Fabric
 
 **Oleh**: [Nama Mahasiswa]
@@ -358,7 +358,7 @@ Peer → Build chaincode → Deploy
 
 **Package Structure:**
 ```
-chainrank_ccaas.tar.gz
+prima_ccaas.tar.gz
 ├── metadata.json
 └── code.tar.gz
     └── connection.json
@@ -528,7 +528,7 @@ Result: ❌ TAMPERED - Document modified!
 
 ## SLIDE 25: Comparison - Before vs After
 
-| Aspect | Before (Manual) | After (ChainRank) |
+| Aspect | Before (Manual) | After (Prima) |
 |--------|-----------------|-------------------|
 | **Transparency** | ❌ Low | ✅ High |
 | **Tampering Risk** | ❌ High | ✅ None (immutable) |

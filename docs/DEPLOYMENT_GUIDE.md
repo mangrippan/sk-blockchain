@@ -1,6 +1,6 @@
-# ChainRank Deployment Guide
+# Prima Deployment Guide
 
-**Purpose:** Complete guide untuk deploy ChainRank dari development ke production  
+**Purpose:** Complete guide untuk deploy Prima dari development ke production  
 **Target:** System administrator, DevOps engineer  
 **Difficulty:** Intermediate
 
@@ -100,7 +100,7 @@ Atau manual step-by-step:
 docker compose -f docker-compose.dev.yml up -d
 
 # Verify database is running
-docker exec chainrank_postgres_dev psql -U postgres -d chainrank_db -c "SELECT 'OK';"
+docker exec prima_postgres_dev psql -U postgres -d prima_db -c "SELECT 'OK';"
 ```
 
 #### 4. Setup Hyperledger Fabric (CCAAS)
@@ -130,7 +130,7 @@ npm install
 node enroll-wallet.js
 
 # Start dengan PM2
-pm2 start server.js --name chainrank-backend
+pm2 start server.js --name prima-backend
 
 # Backend running di http://localhost:3000
 ```
@@ -155,12 +155,12 @@ npm run dev
 | `admin@prima.ipb` | `admin123` | Superadmin |
 | `budi.santoso@prima.ipb` | `admin123` | Dosen |
 | `ahmad.dahlan@prima.ipb` | `admin123` | Pimpinan |
-| `sdm@chainrank.test` | `admin123` | Admin SDM |
+| `sdm@prima.test` | `admin123` | Admin SDM |
 
 #### 8. Verify Blockchain Recording
 
 ```powershell
-docker exec chainrank_postgres_dev psql -U postgres -d chainrank_db -c "SELECT id, tx_id_fabric, status FROM sk.kegiatan_dosen ORDER BY created_at DESC LIMIT 5;"
+docker exec prima_postgres_dev psql -U postgres -d prima_db -c "SELECT id, tx_id_fabric, status FROM sk.kegiatan_dosen ORDER BY created_at DESC LIMIT 5;"
 ```
 
 Jika `tx_id_fabric` terisi → blockchain integration berhasil.
@@ -206,7 +206,7 @@ nano .env
 # Database
 DB_HOST=postgres  # Docker service name
 DB_PORT=5432      # Internal Docker port
-DB_NAME=chainrank_db
+DB_NAME=prima_db
 DB_USER=postgres
 DB_PASSWORD=<strong-password>  # CHANGE THIS!
 DB_SCHEMA=sk
@@ -254,7 +254,7 @@ docker-compose logs -f
 sudo apt install -y nginx
 
 # Create Nginx config
-sudo nano /etc/nginx/sites-available/chainrank
+sudo nano /etc/nginx/sites-available/prima
 ```
 
 **Nginx config:**
@@ -288,7 +288,7 @@ server {
 **Enable site:**
 ```bash
 # Enable configuration
-sudo ln -s /etc/nginx/sites-available/chainrank /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/prima /etc/nginx/sites-enabled/
 
 # Test configuration
 sudo nginx -t
@@ -352,9 +352,9 @@ sudo -u postgres psql
 
 **PostgreSQL commands:**
 ```sql
-CREATE DATABASE chainrank_db;
-CREATE USER chainrank WITH ENCRYPTED PASSWORD 'strong-password';
-GRANT ALL PRIVILEGES ON DATABASE chainrank_db TO chainrank;
+CREATE DATABASE prima_db;
+CREATE USER prima WITH ENCRYPTED PASSWORD 'strong-password';
+GRANT ALL PRIVILEGES ON DATABASE prima_db TO prima;
 \q
 ```
 
@@ -365,10 +365,10 @@ GRANT ALL PRIVILEGES ON DATABASE chainrank_db TO chainrank;
 cd UsulanKenaikanPangkatBlockchain/database
 
 # Import schema
-psql -U chainrank -d chainrank_db -f schema-hybrid.sql
+psql -U prima -d prima_db -f schema-hybrid.sql
 
 # Import seed data (optional)
-psql -U chainrank -d chainrank_db -f seed.sql
+psql -U prima -d prima_db -f seed.sql
 ```
 
 #### 3. Setup Backend
@@ -392,7 +392,7 @@ nano .env
 sudo npm install -g pm2
 
 # Start backend with PM2
-pm2 start server.js --name chainrank-backend
+pm2 start server.js --name prima-backend
 pm2 save
 pm2 startup
 ```
@@ -416,10 +416,10 @@ npm run build
 
 ```bash
 # Copy built files to Nginx directory
-sudo cp -r dist/* /var/www/chainrank/
+sudo cp -r dist/* /var/www/prima/
 
 # Create Nginx config
-sudo nano /etc/nginx/sites-available/chainrank
+sudo nano /etc/nginx/sites-available/prima
 ```
 
 **Nginx config:**
@@ -427,7 +427,7 @@ sudo nano /etc/nginx/sites-available/chainrank
 server {
     listen 80;
     server_name your-domain.com;
-    root /var/www/chainrank;
+    root /var/www/prima;
     index index.html;
 
     location / {
@@ -538,12 +538,12 @@ node test-fabric-direct.js
 # Test via CLI
 cd ../fabric-network/fabric-samples/test-network
 . scripts/envVar.sh && setGlobals 1
-peer chaincode query -C skchannel -n chainrank -c '{"function":"KegiatanContract:GetAllKegiatan","Args":[]}'
+peer chaincode query -C primachannel -n prima -c '{"function":"KegiatanContract:GetAllKegiatan","Args":[]}'
 ```
 
 **Network details:**
-- Channel: `skchannel`
-- Chaincode: `chainrank` (contract: KegiatanContract)
+- Channel: `primachannel`
+- Chaincode: `prima` (contract: KegiatanContract)
 - Endorsement: OR('Org1MSP.peer','Org2MSP.peer')
 - Connection profile: `fabric-config/connection-org1-wsl.json`
 - Wallet: `fabric-config/wallet/`
@@ -587,7 +587,7 @@ peer chaincode query -C skchannel -n chainrank -c '{"function":"KegiatanContract
 |----------|-------------|---------|----------|
 | `DB_HOST` | Database host | `localhost` | Yes |
 | `DB_PORT` | Database port | `5432` | Yes |
-| `DB_NAME` | Database name | `chainrank_db` | Yes |
+| `DB_NAME` | Database name | `prima_db` | Yes |
 | `DB_USER` | Database user | `postgres` | Yes |
 | `DB_PASSWORD` | Database password | `strong-password` | Yes |
 | `DB_SCHEMA` | Schema name | `sk` | Yes |
@@ -597,8 +597,8 @@ peer chaincode query -C skchannel -n chainrank -c '{"function":"KegiatanContract
 | `NODE_ENV` | Environment | `production` | Yes |
 | `CORS_ORIGIN` | Allowed origin | `https://domain.com` | Yes |
 | `FABRIC_ENABLED` | Enable blockchain | `true` | No |
-| `FABRIC_CHANNEL` | Fabric channel | `skchannel` | If Fabric enabled |
-| `FABRIC_CHAINCODE` | Chaincode name | `chainrank` | If Fabric enabled |
+| `FABRIC_CHANNEL` | Fabric channel | `primachannel` | If Fabric enabled |
+| `FABRIC_CHAINCODE` | Chaincode name | `prima` | If Fabric enabled |
 
 ### Frontend Environment Variables
 
@@ -627,11 +627,11 @@ VITE_API_BASE_URL=https://api.your-domain.com/api/v1 npm run build
 cd database
 
 # Option 1: Using psql
-psql -U postgres -d chainrank_db -f schema-hybrid.sql
-psql -U postgres -d chainrank_db -f seed.sql
+psql -U postgres -d prima_db -f schema-hybrid.sql
+psql -U postgres -d prima_db -f seed.sql
 
 # Option 2: Using Docker exec
-docker exec -i chainrank_postgres_dev psql -U postgres -d chainrank_db < schema-hybrid.sql
+docker exec -i prima_postgres_dev psql -U postgres -d prima_db < schema-hybrid.sql
 ```
 
 ### Backup & Restore
@@ -639,19 +639,19 @@ docker exec -i chainrank_postgres_dev psql -U postgres -d chainrank_db < schema-
 **Backup:**
 ```bash
 # Backup to file
-pg_dump -U postgres -d chainrank_db > backup-$(date +%Y%m%d).sql
+pg_dump -U postgres -d prima_db > backup-$(date +%Y%m%d).sql
 
 # Or with Docker:
-docker exec chainrank_postgres_dev pg_dump -U postgres chainrank_db > backup.sql
+docker exec prima_postgres_dev pg_dump -U postgres prima_db > backup.sql
 ```
 
 **Restore:**
 ```bash
 # Restore from file
-psql -U postgres -d chainrank_db < backup.sql
+psql -U postgres -d prima_db < backup.sql
 
 # Or with Docker:
-docker exec -i chainrank_postgres_dev psql -U postgres -d chainrank_db < backup.sql
+docker exec -i prima_postgres_dev psql -U postgres -d prima_db < backup.sql
 ```
 
 ### Migration for Schema Changes
@@ -676,7 +676,7 @@ COMMIT;
 
 **Apply:**
 ```bash
-psql -U postgres -d chainrank_db -f migration-001-add-audit-field.sql
+psql -U postgres -d prima_db -f migration-001-add-audit-field.sql
 ```
 
 ---
@@ -715,7 +715,7 @@ sudo cp your-cert.crt /etc/nginx/ssl/
 sudo cp your-key.key /etc/nginx/ssl/
 
 # Update Nginx config
-sudo nano /etc/nginx/sites-available/chainrank
+sudo nano /etc/nginx/sites-available/prima
 ```
 
 **Nginx SSL config:**
@@ -751,19 +751,19 @@ server {
 **Backend logs (PM2):**
 ```bash
 # View logs
-pm2 logs chainrank-backend
+pm2 logs prima-backend
 
 # Save logs to file
-pm2 logs chainrank-backend --lines 1000 > backend-logs.txt
+pm2 logs prima-backend --lines 1000 > backend-logs.txt
 ```
 
 **Docker logs:**
 ```bash
 # View backend logs
-docker logs chainrank_backend -f
+docker logs prima_backend -f
 
 # View frontend logs
-docker logs chainrank_frontend -f
+docker logs prima_frontend -f
 
 # View all services
 docker-compose logs -f
@@ -820,7 +820,7 @@ sudo systemctl status postgresql
 cat backend/.env | grep DB_
 
 # Test connection manually
-psql -h localhost -p 5434 -U postgres -d chainrank_db
+psql -h localhost -p 5434 -U postgres -d prima_db
 
 # Check firewall
 sudo ufw status

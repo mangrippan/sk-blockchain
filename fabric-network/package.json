@@ -1,7 +1,7 @@
 {
-  "name": "chainrank-fabric-network",
+  "name": "prima-fabric-network",
   "version": "1.0.0",
-  "description": "Fabric network setup scripts for ChainRank",
+  "description": "Fabric network setup scripts for Prima",
   "scripts": {
     "setup": "bash setup.sh",
     "start": "bash start-network.sh",

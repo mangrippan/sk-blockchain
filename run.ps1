@@ -1,5 +1,5 @@
 # ============================================================
-# ChainRank - Run All Services (Non-Interactive)
+# Prima - Run All Services (Non-Interactive)
 # Starts: PostgreSQL, Fabric Network, Backend, Frontend
 # Usage: .\run.ps1 [-SkipFabric] [-SkipFrontend] [-Clean] [-Verify]
 #   -Verify : run only the end-of-startup health checks, start nothing
@@ -31,7 +31,7 @@ function Invoke-SmokeTest {
     $allOk = $true
 
     # PostgreSQL
-    $pgHealth = docker inspect --format "{{.State.Health.Status}}" chainrank_postgres_dev 2>$null
+    $pgHealth = docker inspect --format "{{.State.Health.Status}}" prima_postgres_dev 2>$null
     if ($pgHealth -eq "healthy") { Write-Host "  [OK]   PostgreSQL (healthy)" -ForegroundColor Green }
     else { Write-Host "  [FAIL] PostgreSQL (status: $pgHealth)" -ForegroundColor Red; $allOk = $false }
 
@@ -40,7 +40,7 @@ function Invoke-SmokeTest {
         if (Test-Port 7051) { Write-Host "  [OK]   Fabric peer port 7051 reachable" -ForegroundColor Green }
         else { Write-Host "  [FAIL] Fabric peer port 7051 not reachable" -ForegroundColor Red; $allOk = $false }
 
-        $ccUp = (docker ps --filter "name=^/chainrank.org1.example.com$" --format "{{.Status}}" 2>$null) -match "^Up"
+        $ccUp = (docker ps --filter "name=^/prima.org1.example.com$" --format "{{.Status}}" 2>$null) -match "^Up"
         if ($ccUp) { Write-Host "  [OK]   Chaincode container running" -ForegroundColor Green }
         else { Write-Host "  [FAIL] Chaincode container not running" -ForegroundColor Red; $allOk = $false }
     }
@@ -83,7 +83,7 @@ if ($Verify) {
 
 Write-Host ''
 Write-Host '  ========================================' -ForegroundColor Cyan
-Write-Host '    ChainRank - Starting All Services    ' -ForegroundColor Cyan
+Write-Host '    Prima - Starting All Services    ' -ForegroundColor Cyan
 Write-Host '  ========================================' -ForegroundColor Cyan
 Write-Host ''
 
@@ -94,12 +94,12 @@ $startTime = Get-Date
 # ─────────────────────────────────────────────
 Write-Host "[1/4] PostgreSQL Database" -ForegroundColor Yellow
 
-$pgRunning = docker ps --filter "name=chainrank_postgres_dev" --format "{{.Status}}" 2>$null
+$pgRunning = docker ps --filter "name=prima_postgres_dev" --format "{{.Status}}" 2>$null
 if ($pgRunning -match "Up") {
     Write-Host "  Already running" -ForegroundColor Green
 } else {
     Write-Host "  Starting..." -ForegroundColor Gray
-    docker start chainrank_postgres_dev 2>$null
+    docker start prima_postgres_dev 2>$null
     if ($LASTEXITCODE -ne 0) {
         docker compose -f "$PROJECT_ROOT\docker-compose.dev.yml" up -d postgres
     }
@@ -108,7 +108,7 @@ if ($pgRunning -match "Up") {
     do {
         Start-Sleep -Seconds 2
         $attempts++
-        $health = docker inspect --format "{{.State.Health.Status}}" chainrank_postgres_dev 2>$null
+        $health = docker inspect --format "{{.State.Health.Status}}" prima_postgres_dev 2>$null
     } while ($health -ne "healthy" -and $attempts -lt 10)
 
     if ($health -eq "healthy") {
@@ -138,7 +138,7 @@ if ($SkipFabric) {
     $peerStatus = docker ps -a --filter "name=^/peer0.org1.example.com$" --format "{{.Status}}" 2>$null
     $peerExists = -not [string]::IsNullOrWhiteSpace($peerStatus)
     $peerUp = $peerStatus -match "^Up"
-    $chaincodeUp = (docker ps --filter "name=^/chainrank.org1.example.com$" --format "{{.Status}}" 2>$null) -match "^Up"
+    $chaincodeUp = (docker ps --filter "name=^/prima.org1.example.com$" --format "{{.Status}}" 2>$null) -match "^Up"
 
     $needFullStart = $false
 
@@ -256,7 +256,7 @@ if ($SkipFrontend) {
         Start-Process powershell -ArgumentList @(
             "-NoExit", "-Command",
             "Set-Location '$PROJECT_ROOT\frontend'; " +
-            "Write-Host '=== ChainRank Frontend ===' -ForegroundColor Green; " +
+            "Write-Host '=== Prima Frontend ===' -ForegroundColor Green; " +
             "Write-Host 'URL: http://localhost:5173' -ForegroundColor Cyan; " +
             "Write-Host ''; " +
             "npm run dev"
@@ -287,7 +287,7 @@ Write-Host ''
 Write-Host '  Services:' -ForegroundColor White
 Write-Host '    Database    : PostgreSQL (localhost:5434)' -ForegroundColor Gray
 if (-not $SkipFabric) {
-    Write-Host '    Blockchain  : Fabric Network (skchannel)' -ForegroundColor Gray
+    Write-Host '    Blockchain  : Fabric Network (primachannel)' -ForegroundColor Gray
     Write-Host '    CouchDB     : http://localhost:5984/_utils' -ForegroundColor Gray
 }
 Write-Host '    Backend     : http://localhost:3000' -ForegroundColor Gray

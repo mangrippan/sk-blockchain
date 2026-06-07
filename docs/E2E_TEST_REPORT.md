@@ -1,9 +1,9 @@
 # End-to-End Test Report
-**Project**: ChainRank — Sistem Usulan Kenaikan Pangkat Dosen Berbasis Blockchain  
+**Project**: Prima — Sistem Usulan Kenaikan Pangkat Dosen Berbasis Blockchain  
 **Module**: Full User Journey (Auth → Kegiatan → Verifikasi → Usulan → SK → Audit) + Frontend UI Smoke Check  
 **Test Date**: June 7, 2026  
 **Test Duration**: 1.524 seconds (automated run) + manual UI smoke check  
-**Environment**: Development — LIVE stack, no mocks (Node.js, Express on `:3000`, Vue3/Vite on `:5173`, PostgreSQL `chainrank_db`, Hyperledger Fabric network `peer0.org1/org2` + `orderer` + 2× CouchDB, all running ~19+ hours uptime)
+**Environment**: Development — LIVE stack, no mocks (Node.js, Express on `:3000`, Vue3/Vite on `:5173`, PostgreSQL `prima_db`, Hyperledger Fabric network `peer0.org1/org2` + `orderer` + 2× CouchDB, all running ~19+ hours uptime)
 
 > ℹ️ **Catatan metodologi**: Tidak seperti `BLOCKCHAIN_VALIDATION_TEST_REPORT.md` (unit test dengan mock `fabricClient`/DB pool), pengujian ini dijalankan **terhadap stack yang benar-benar hidup** — Postgres, Hyperledger Fabric, dan CouchDB sungguhan, tanpa satupun mock. Skrip pengujian: [`backend/e2e-test.js`](../backend/e2e-test.js); hasil mentah terstruktur: [`backend/e2e-test-results.json`](../backend/e2e-test-results.json). Setiap klaim status di laporan ini diambil langsung dari `e2e-test-results.json` hasil eksekusi sungguhan pada `2026-06-07T06:51:54.986Z` — tidak ada angka yang dikarang.
 
@@ -16,7 +16,7 @@
 - ⚠️ **Warnings**: 3 of 12 steps (25%) — *designed fallback behavior engaged, not application crashes*
 - ❌ **Failed**: 1 of 12 steps (8.3%) — **genuine application bug, run aborted here**
 - ⏱️ **Execution Time**: 1.524 seconds (aborted early — full journey would normally include 8 more steps: proses usulan, terbitkan SK, validate-blockchain, audit trails, system status)
-- 🧪 **Test Account**: brand-new `dosen` registered live by the script (`e2e.dosen.1780815113446@chainrank.test`, user id `26`) — chosen specifically so the run does not mutate any pre-existing user record (SK issuance permanently changes `users.jabatan_id`)
+- 🧪 **Test Account**: brand-new `dosen` registered live by the script (`e2e.dosen.1780815113446@prima.test`, user id `26`) — chosen specifically so the run does not mutate any pre-existing user record (SK issuance permanently changes `users.jabatan_id`)
 
 ### UI Smoke Check (Manual + Live-Data Trace)
 - ✅ **Frontend dev server**: responding `HTTP 200`, serving the Vue3 SPA shell and all six key view files with **zero compile errors**
@@ -55,13 +55,13 @@ All data below is copied verbatim (or trivially reformatted) from `backend/e2e-t
 **Duration**: 343ms · **Status**: ✅ PASS  
 **Description**: Mendaftarkan akun dosen baru (bukan akun existing) agar SK issuance di akhir journey tidak memutasi data user yang sudah ada secara permanen  
 **Expected**: `201 Created`, user baru dengan role `dosen`  
-**Actual**: `created user id=26, email=e2e.dosen.1780815113446@chainrank.test, role=dosen`
+**Actual**: `created user id=26, email=e2e.dosen.1780815113446@prima.test, role=dosen`
 
 ### Step 3 — Login as dosen (new account)
 **Duration**: 307ms · **Status**: ✅ PASS  
 **Description**: `POST /auth/login` mengembalikan JWT yang valid untuk akun yang baru didaftarkan  
 **Expected**: `200 OK` + token JWT  
-**Actual**: JWT diterima dan didekode — payload berisi `id: 26, role: "dosen", aud: "chainrank-app", iss: "chainrank-api"`, exp 24 jam dari `iat`
+**Actual**: JWT diterima dan didekode — payload berisi `id: 26, role: "dosen", aud: "prima-app", iss: "prima-api"`, exp 24 jam dari `iat`
 
 ### Steps 4–6 — Upload kegiatan #1/#2/#3 (`POST /kegiatan`, multipart PDF, `ref_kegiatan_id=4` → 40 KUM each)
 **Duration**: 26ms / 12ms / 15ms · **Status**: ✅ PASS (all 3)  
@@ -87,7 +87,7 @@ Tiga kegiatan dipilih dengan total **120 KUM** — melewati ambang minimum **100
 **Actual**: `DB status=verified ✓, tx_id_fabric=(none)` — untuk **ketiga** kegiatan  
 **⚠️ Why WARN, not FAIL**: Sistem ini didesain dengan *graceful fallback* — penulisan ke database **tidak bergantung** pada keberhasilan penulisan ke blockchain (lihat juga `BLOCKCHAIN_VALIDATION_TEST_REPORT.md`, "Robust Fallback Mechanism"). Status DB ter-update dengan benar, jadi ini bukan crash atau kegagalan fungsional dari sudut pandang pengguna. **Namun** — ketiadaan `tx_id_fabric` di ketiga record menandakan penulisan blockchain **gagal secara diam-diam** untuk transaksi-transaksi ini. Lihat [Finding #1](#1--blockchain-writes-are-silently-failing-while-the-status-indicator-reports-healthy-) untuk root cause dan bukti silang dengan database secara langsung.
 
-**Cross-check langsung ke database** (`docker exec chainrank_postgres_dev psql ... SELECT id, status, tx_id_fabric, dosen_id FROM sk.kegiatan_dosen WHERE id IN (...)`):
+**Cross-check langsung ke database** (`docker exec prima_postgres_dev psql ... SELECT id, status, tx_id_fabric, dosen_id FROM sk.kegiatan_dosen WHERE id IN (...)`):
 ```
  95975d3d-26d2-43cd-bbb9-b2f6ffbcbe9b | verified |              | 26
  e32f69e7-85f4-413a-9b05-d32eda578d4f | verified |              | 26
@@ -187,8 +187,8 @@ Payload **live** yang benar-benar diterima frontend dari `GET /api/v1/system/sta
     "enabled": true,
     "connected": true,
     "identity": "appUser",
-    "channel": "skchannel",
-    "chaincode": "chainrank",
+    "channel": "primachannel",
+    "chaincode": "prima",
     "connectedAt": "2026-06-06T10:33:12.233Z"
   }
 }
@@ -199,7 +199,7 @@ Menelusuri `computed` properties dengan payload ini sebagai input:
 | `statusLabel` | `"Blockchain"` |
 | `statusClass` | `bg-green-50 text-green-700` (chip hijau) |
 | `dotClass` + animasi | `bg-green-500` + `animate-pulse` (titik hijau berdenyut) |
-| `statusTooltip` | `"Terhubung sebagai: appUser\nChannel: skchannel\nChaincode: chainrank"` |
+| `statusTooltip` | `"Terhubung sebagai: appUser\nChannel: primachannel\nChaincode: prima"` |
 
 **Kesimpulan teknis**: indikator **berfungsi persis sesuai spesifikasinya** — ia secara akurat mencerminkan apa yang dilaporkan `GET /system/status`, lengkap dengan polling 30 detik dan fallback `{ enabled: false, connected: false }` saat fetch gagal (baris 64–66). Dari sisi *implementasi frontend*, ini ✅ PASS murni.
 
@@ -238,7 +238,7 @@ Menelusuri `computed` properties dengan payload ini sebagai input:
 
 **Bukti langsung dari run ini**:
 - 3 dari 3 kegiatan yang diverifikasi (Steps 8–10) berhasil ter-update di database (`status=verified`) tapi **tidak satupun** mendapat `tx_id_fabric` — dikonfirmasi baik dari respons API maupun query langsung ke `sk.kegiatan_dosen`
-- Pada saat yang hampir bersamaan, `GET /system/status` melaporkan `blockchain.connected: true` dengan `identity: "appUser"`, `channel: "skchannel"` — tampak benar-benar sehat
+- Pada saat yang hampir bersamaan, `GET /system/status` melaporkan `blockchain.connected: true` dengan `identity: "appUser"`, `channel: "primachannel"` — tampak benar-benar sehat
 
 **Root cause (ditelusuri via skrip diagnostik sementara `diag-fabric.js`, dijalankan langsung memanggil `fabricClient.recordKegiatanCreation`, lalu dihapus setelah selesai)**:
 ```
@@ -344,7 +344,7 @@ Setelah Finding #2 diperbaiki (dan idealnya Finding #1 juga ditangani atau jarin
 
 ```
 ╔════════════════════════════════════════════════════════╗
-║              E2E TEST REPORT — ChainRank                ║
+║              E2E TEST REPORT — Prima                ║
 ╠════════════════════════════════════════════════════════╣
 ║  Status:        ⚠️  JOURNEY BLOCKED — CRITICAL BUG      ║
 ║  Steps Run:     12 of ~20 (aborted on hard FAIL)        ║
@@ -374,7 +374,7 @@ Setelah Finding #2 diperbaiki (dan idealnya Finding #1 juga ditangani atau jarin
 
 - **Test script**: [`backend/e2e-test.js`](../backend/e2e-test.js) — standalone Node script, no new dependencies (native `fetch`/`FormData`/`Blob`), runs the full live journey and writes structured results
 - **Raw structured results**: [`backend/e2e-test-results.json`](../backend/e2e-test-results.json) — every number and string quoted in this report's "Detailed Test Results" section is sourced verbatim from this file (`runAt: "2026-06-07T06:51:54.986Z"`)
-- **Test account created**: `e2e.dosen.1780815113446@chainrank.test` (user id `26`, role `dosen`) — left in the database as a record of this run; does not collide with or mutate any pre-existing seeded account
+- **Test account created**: `e2e.dosen.1780815113446@prima.test` (user id `26`, role `dosen`) — left in the database as a record of this run; does not collide with or mutate any pre-existing seeded account
 - **Fixtures created**: 3 kegiatan records (`94a14204-…`, `95975d3d-…`, `e32f69e7-…`), all `status=verified`, `tx_id_fabric=NULL`, owned by `dosen_id=26`
 
 ---
@@ -462,7 +462,7 @@ Setelah Root Cause #1–#3 diperbaiki dan diverifikasi satu per satu, suite `nod
 
 ```
 ╔════════════════════════════════════════════════════════╗
-║         E2E TEST REPORT — ChainRank (RE-RUN)            ║
+║         E2E TEST REPORT — Prima (RE-RUN)            ║
 ╠════════════════════════════════════════════════════════╣
 ║  Status:        ✅ ALL STEPS PASSED                     ║
 ║  Steps Run:     20 of 20                                ║

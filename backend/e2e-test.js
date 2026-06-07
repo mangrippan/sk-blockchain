@@ -1,5 +1,5 @@
 /**
- * End-to-End test runner for ChainRank
+ * End-to-End test runner for Prima
  *
  * Exercises the FULL user journey against the LIVE running stack —
  * real Express server, real PostgreSQL, real Hyperledger Fabric network
@@ -30,7 +30,7 @@ const ts = Date.now();
 const DOSEN = {
   nip: `E2E${ts}`,
   nama: 'E2E Test Dosen',
-  email: `e2e.dosen.${ts}@chainrank.test`,
+  email: `e2e.dosen.${ts}@prima.test`,
   password: 'E2eTest123!',
   role: 'dosen',
 };
@@ -130,7 +130,7 @@ async function login(email, password) {
 
 async function run() {
   console.log('='.repeat(64));
-  console.log(' ChainRank — End-to-End Test (live stack, no mocks)');
+  console.log(' Prima — End-to-End Test (live stack, no mocks)');
   console.log(` Target   : ${BASE_URL}`);
   console.log(` Run at   : ${new Date().toISOString()}`);
   console.log(` Test user: ${DOSEN.email}`);
@@ -299,7 +299,7 @@ function writeSummary(ctx, overallStart, aborted, abortReason) {
   const failed = results.filter(r => r.status === 'FAIL').length;
 
   const summary = {
-    project: 'ChainRank — Sistem Usulan Kenaikan Pangkat Blockchain',
+    project: 'Prima — Sistem Usulan Kenaikan Pangkat Blockchain',
     runAt: new Date().toISOString(),
     baseUrl: BASE_URL,
     testAccount: { email: DOSEN.email, nip: DOSEN.nip, generatedId: ctx.dosenId },

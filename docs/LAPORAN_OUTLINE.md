@@ -1,4 +1,4 @@
-# Outline Laporan Tugas Akhir - ChainRank
+# Outline Laporan Tugas Akhir - Prima
 
 ## Informasi Umum
 - **Judul**: Sistem Kenaikan Pangkat Dosen Berbasis Blockchain Menggunakan Hyperledger Fabric
@@ -391,21 +391,21 @@ Documented in Swagger UI: http://localhost:3000/api-docs
 **Implementation:**
 ```powershell
 # Build image di Windows
-docker build -t chainrank_ccaas:latest chaincode/
+docker build -t prima_ccaas:latest chaincode/
 
 # Create CCAAS package
 cd code && tar czf ../code.tar.gz connection.json
-tar czf chainrank_ccaas.tar.gz metadata.json code.tar.gz
+tar czf prima_ccaas.tar.gz metadata.json code.tar.gz
 
 # Install package
-peer lifecycle chaincode install chainrank_ccaas.tar.gz
+peer lifecycle chaincode install prima_ccaas.tar.gz
 
 # Start external containers
-docker run -d --name chainrank.org1.example.com \
+docker run -d --name prima.org1.example.com \
   --network fabric_test \
   -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999 \
   -e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID \
-  chainrank_ccaas:latest
+  prima_ccaas:latest
 ```
 
 ### 4.4 Implementasi Backend
@@ -480,7 +480,7 @@ src/
 
 #### 4.6.3 End-to-End Testing
 - Manual testing guide (docs/MANUAL_TESTING_GUIDE.md)
-- Postman collection (docs/ChainRank.postman_collection.json)
+- Postman collection (docs/Prima.postman_collection.json)
 - User flow testing
 
 ---

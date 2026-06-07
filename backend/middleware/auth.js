@@ -35,8 +35,8 @@ const auth = (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET, {
       algorithms: ['HS256'],
-      issuer: 'chainrank-api',
-      audience: 'chainrank-app',
+      issuer: 'prima-api',
+      audience: 'prima-app',
     });
     
     // Attach user info to request

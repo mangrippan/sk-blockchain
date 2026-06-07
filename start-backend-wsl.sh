@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # ============================================
-# ChainRank Backend Starter (WSL)
+# Prima Backend Starter (WSL)
 # Run backend in WSL for proper Fabric connectivity
 # ============================================
 
 cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
 
-echo "🚀 Starting ChainRank Backend in WSL..."
+echo "🚀 Starting Prima Backend in WSL..."
 echo ""
 
 # Check if node_modules exists
@@ -26,7 +26,7 @@ if [ ! -f ".env" ]; then
 fi
 
 echo "============================================"
-echo "  ChainRank Backend Server (WSL)"
+echo "  Prima Backend Server (WSL)"
 echo "============================================"
 echo ""
 echo "API: http://localhost:3000"

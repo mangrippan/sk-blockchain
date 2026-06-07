@@ -1,8 +1,8 @@
 {
 	"info": {
-		"_postman_id": "chainrank-api-v1",
-		"name": "ChainRank API - MVP",
-		"description": "API endpoints for ChainRank - Blockchain-based Faculty Promotion System\n\nBase URL: http://localhost:3000\n\n## Authentication\nMost endpoints require JWT token in Authorization header:\n```\nAuthorization: Bearer <token>\n```\n\nGet token from /api/v1/auth/login endpoint.",
+		"_postman_id": "prima-api-v1",
+		"name": "Prima API - MVP",
+		"description": "API endpoints for Prima - Blockchain-based Faculty Promotion System\n\nBase URL: http://localhost:3000\n\n## Authentication\nMost endpoints require JWT token in Authorization header:\n```\nAuthorization: Bearer <token>\n```\n\nGet token from /api/v1/auth/login endpoint.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -21,7 +21,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nip\": \"199999012021031099\",\n  \"nama\": \"Test Dosen\",\n  \"email\": \"test@chainrank.test\",\n  \"password\": \"Password123!\",\n  \"role\": \"dosen\"\n}"
+							"raw": "{\n  \"nip\": \"199999012021031099\",\n  \"nama\": \"Test Dosen\",\n  \"email\": \"test@prima.test\",\n  \"password\": \"Password123!\",\n  \"role\": \"dosen\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/register",

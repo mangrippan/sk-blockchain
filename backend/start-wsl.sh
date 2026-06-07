@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # ============================================
-# ChainRank Backend - WSL Startup Script
+# Prima Backend - WSL Startup Script
 # ============================================
 
 cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
 
 echo "============================================"
-echo "  🚀 Starting ChainRank Backend (WSL)"
+echo "  🚀 Starting Prima Backend (WSL)"
 echo "============================================"
 echo ""
 echo "📍 Working Directory: $(pwd)"

@@ -1,4 +1,4 @@
-# ChainRank - Startup Guide
+# Prima - Startup Guide
 
 Panduan lengkap untuk menjalankan sistem blockchain dari awal.
 
@@ -7,7 +7,7 @@ Panduan lengkap untuk menjalankan sistem blockchain dari awal.
 - **Docker Desktop** (dengan WSL2 integration)
 - **WSL Ubuntu** (distro terpasang)
 - **Node.js 18+** (di Windows)
-- **PostgreSQL** (via Docker container `chainrank_postgres_dev`)
+- **PostgreSQL** (via Docker container `prima_postgres_dev`)
 
 ## Arsitektur
 
@@ -34,8 +34,8 @@ cd fabric-network
 
 Script ini akan:
 - Start Fabric containers (peers, orderer, CAs, CouchDB)
-- Create channel `skchannel`
-- Package & install chaincode `chainrank`
+- Create channel `primachannel`
+- Package & install chaincode `prima`
 - Build & start chaincode Docker containers (CCAAS method)
 - Approve & commit chaincode definition
 
@@ -54,7 +54,7 @@ Mendaftarkan identitas `admin` dan `appUser` ke wallet (`fabric-config/wallet/`)
 
 **Jika container sudah ada** (biasanya setelah pernah dibuat):
 ```powershell
-docker start chainrank_postgres_dev
+docker start prima_postgres_dev
 ```
 
 **Jika pertama kali / belum pernah dibuat**:
@@ -139,7 +139,7 @@ wsl -e bash -c "kill <PID>"
 ### Fabric connection gagal
 1. Pastikan Docker containers running:
    ```powershell
-   docker ps --filter "name=peer0\|orderer\|chainrank"
+   docker ps --filter "name=peer0\|orderer\|prima"
    ```
 2. Pastikan wallet ter-enroll:
    ```powershell
@@ -154,7 +154,7 @@ wsl -e bash -c "kill <PID>"
 
 ### Chaincode containers not running
 ```powershell
-docker ps --filter "name=chainrank"
+docker ps --filter "name=prima"
 # Jika tidak ada, restart network:
 .\restart-fabric-ccaas.ps1
 ```
@@ -162,7 +162,7 @@ docker ps --filter "name=chainrank"
 ### Ledger already exists error
 Jika muncul error saat startup network:
 ```
-cannot create ledger from genesis block: ledger [skchannel] already exists with state [ACTIVE]
+cannot create ledger from genesis block: ledger [primachannel] already exists with state [ACTIVE]
 ```
 
 **Penyebab**: Docker volumes dari network sebelumnya masih ada  
@@ -194,8 +194,8 @@ node enroll-wallet.js
 
 ```env
 FABRIC_ENABLED=true
-FABRIC_CHANNEL=skchannel
-FABRIC_CHAINCODE=chainrank
+FABRIC_CHANNEL=primachannel
+FABRIC_CHAINCODE=prima
 FABRIC_CONNECTION_PROFILE=../fabric-config/connection-org1-wsl.json
 FABRIC_WALLET_PATH=../fabric-config/wallet
 ```

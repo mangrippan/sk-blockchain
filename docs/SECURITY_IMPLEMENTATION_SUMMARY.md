@@ -123,8 +123,8 @@ Implementasi security hardening untuk proyek Usulan Kenaikan Pangkat Blockchain 
 **Changes:**
 - ✅ `jwt.verify()` sekarang menggunakan:
   - `algorithms: ['HS256']` (algoritma pinning)
-  - `issuer: 'chainrank-api'`
-  - `audience: 'chainrank-app'`
+  - `issuer: 'prima-api'`
+  - `audience: 'prima-app'`
 - ✅ `jwt.sign()` juga menggunakan parameter yang sama
 - ✅ Mencegah algorithm confusion attacks
 

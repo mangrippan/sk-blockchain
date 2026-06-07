@@ -18,8 +18,8 @@
 $ErrorActionPreference = "Continue"
 
 $SCRIPT_DIR = $PSScriptRoot
-$CHANNEL_NAME = "skchannel"
-$CHAINCODE_NAME = "chainrank"
+$CHANNEL_NAME = "primachannel"
+$CHAINCODE_NAME = "prima"
 $CHAINCODE_VERSION = "1.0"
 $CHAINCODE_PORT = 9999
 $imageName = "${CHAINCODE_NAME}_ccaas:latest"

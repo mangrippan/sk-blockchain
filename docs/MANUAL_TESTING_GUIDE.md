@@ -1,4 +1,4 @@
-# Manual Testing Guide - ChainRank
+# Manual Testing Guide - Prima
 
 **Purpose:** Comprehensive manual testing checklist untuk memastikan semua fitur working sebelum demo/submission.  
 **Timeline:** 2-3 hours untuk complete testing  
@@ -28,7 +28,7 @@ cd fabric-network
 # Terminal 3 (WSL): Start Backend
 cd /mnt/c/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/backend
 node enroll-wallet.js   # refresh wallet (sekali setelah network start)
-pm2 start server.js --name chainrank-backend
+pm2 start server.js --name prima-backend
 
 # Terminal 4: Start Frontend
 cd frontend
@@ -48,7 +48,7 @@ npm run dev
 **Test Accounts (seeded):**
 - **Dosen:** `budi.santoso@prima.ipb` / `admin123`
 - **Pimpinan:** `ahmad.dahlan@prima.ipb` / `admin123`
-- **Admin SDM:** `sdm@chainrank.test` / `admin123`
+- **Admin SDM:** `sdm@prima.test` / `admin123`
 - **Superadmin:** `admin@prima.ipb` / `admin123`
 
 **Test Files:**
@@ -251,7 +251,7 @@ npm run dev
   ```sql
   SELECT id, deskripsi, status, tx_id_fabric 
   FROM sk.kegiatan_dosen 
-  WHERE user_id = (SELECT id FROM sk.users WHERE email = 'budi.santoso@chainrank.test')
+  WHERE user_id = (SELECT id FROM sk.users WHERE email = 'budi.santoso@prima.test')
   ORDER BY created_at DESC LIMIT 5;
   ```
 - [ ] **Verify:** tx_id_fabric is not null for verified kegiatan
@@ -408,7 +408,7 @@ After completing all scenarios, verify:
 
 #### 9.2 Verify State Database Created
 - [ ] In Fauxton, click "Databases" tab
-- [ ] **Verify:** Database `skchannel_chainrank` exists
+- [ ] **Verify:** Database `primachannel_prima` exists
 - [ ] Click on database name
 - [ ] **Verify:** Documents visible (if kegiatan/usulan created)
 - [ ] Click "All Documents"

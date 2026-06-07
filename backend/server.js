@@ -1,5 +1,5 @@
 /**
- * ChainRank Backend Server
+ * Prima Backend Server
  * Main entry point for the application
  */
 
@@ -36,12 +36,12 @@ const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'ChainRank API Documentation',
+      title: 'Prima API Documentation',
       version: '1.0.0',
-      description: 'Backend API for ChainRank - Blockchain-based Academic Promotion Tracking System',
+      description: 'Backend API for Prima - Blockchain-based Academic Promotion Tracking System',
       contact: {
         name: 'API Support',
-        email: 'support@chainrank.com',
+        email: 'support@prima.com',
       },
     },
     servers: [
@@ -103,7 +103,7 @@ app.use((req, res, next) => {
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'ChainRank API Documentation',
+  customSiteTitle: 'Prima API Documentation',
 }));
 
 /**
@@ -161,7 +161,7 @@ app.use('/api/v1/system', require('./routes/v1/system'));
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'ChainRank API Server',
+    message: 'Prima API Server',
     version: '1.0.0',
     endpoints: {
       health: '/health',
@@ -211,7 +211,7 @@ async function startServer() {
     server = app.listen(PORT, () => {
       console.log('');
       console.log('='.repeat(50));
-      console.log(`🚀 ChainRank Backend Server`);
+      console.log(`🚀 Prima Backend Server`);
       console.log(`📡 Running on: http://localhost:${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🗄️  Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);

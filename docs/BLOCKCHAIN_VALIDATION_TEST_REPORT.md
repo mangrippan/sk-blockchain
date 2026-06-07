@@ -505,7 +505,7 @@
 1. Check blockchain network status: `docker ps | grep hyperledger`
 2. Verify connection profile: `fabric-config/connection-org1.json`
 3. Check endorsement policy: `peer lifecycle chaincode querycommitted`
-4. Review logs: `docker logs -f chainrank`
+4. Review logs: `docker logs -f prima`
 
 ### Contact
 - **Developer**: Backend Team

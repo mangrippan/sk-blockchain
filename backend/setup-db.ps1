@@ -28,9 +28,9 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[OK] PostgreSQL is running!" -ForegroundColor Green
 
 # Drop and create database
-Write-Host "[DB] Creating database 'chainrank_db'..." -ForegroundColor Cyan
-& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -c "DROP DATABASE IF EXISTS chainrank_db;" 2>&1 | Out-Null
-& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -c "CREATE DATABASE chainrank_db;" 2>&1 | Out-Null
+Write-Host "[DB] Creating database 'prima_db'..." -ForegroundColor Cyan
+& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -c "DROP DATABASE IF EXISTS prima_db;" 2>&1 | Out-Null
+& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -c "CREATE DATABASE prima_db;" 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Database creation failed!" -ForegroundColor Red
@@ -48,7 +48,7 @@ if (!(Test-Path $schemaPath)) {
     exit 1
 }
 
-& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d chainrank_db -f $schemaPath 2>&1 | Out-Null
+& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d prima_db -f $schemaPath 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Schema setup failed!" -ForegroundColor Red
@@ -66,7 +66,7 @@ if (!(Test-Path $seedPath)) {
     exit 1
 }
 
-& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d chainrank_db -f $seedPath 2>&1 | Out-Null
+& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d prima_db -f $seedPath 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Seed data failed!" -ForegroundColor Red
@@ -77,13 +77,13 @@ Write-Host "[OK] Seed data loaded successfully!" -ForegroundColor Green
 
 # Verify setup
 Write-Host "`n[VERIFY] Checking database..." -ForegroundColor Cyan
-& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d chainrank_db -c "\dt sk.*"
+& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d prima_db -c "\dt sk.*"
 
 Write-Host "`n[VERIFY] Checking users..." -ForegroundColor Cyan
-& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d chainrank_db -c "SET search_path TO sk; SELECT COUNT(*) as user_count FROM users;"
+& "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d prima_db -c "SET search_path TO sk; SELECT COUNT(*) as user_count FROM users;"
 
 Write-Host "`n[SUCCESS] PostgreSQL setup completed!" -ForegroundColor Green
-Write-Host "Database: chainrank_db" -ForegroundColor White
+Write-Host "Database: prima_db" -ForegroundColor White
 Write-Host "User: postgres" -ForegroundColor White
 Write-Host "Password: $Password" -ForegroundColor White
 Write-Host "Host: localhost" -ForegroundColor White

@@ -438,7 +438,7 @@ cd fabric-network
 docker ps | grep hyperledger
 
 # Check chaincode logs
-docker logs -f $(docker ps -q -f name=chainrank)
+docker logs -f $(docker ps -q -f name=prima)
 
 # Manually query blockchain
 cd backend
@@ -449,7 +449,7 @@ node test-fabric-direct.js
 ```bash
 # Check endorsement policy
 cd fabric-network
-peer lifecycle chaincode querycommitted --channelID skchannel --name chainrank
+peer lifecycle chaincode querycommitted --channelID primachannel --name prima
 
 # Should show: OR('Org1MSP.peer','Org2MSP.peer')
 ```

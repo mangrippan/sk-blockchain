@@ -1,5 +1,5 @@
 # ============================================
-# ChainRank - Stop All Services
+# Prima - Stop All Services
 # Usage: .\stop-all.ps1 [-Hard]
 #   (default) SOFT stop  : pauses Fabric, KEEPS all data (ledger + CouchDB)
 #   -Hard               : full teardown, REMOVES volumes (wipes ledger+CouchDB)
@@ -14,9 +14,9 @@ $PROJECT_ROOT = $PSScriptRoot
 
 Write-Host "========================================" -ForegroundColor Cyan
 if ($Hard) {
-    Write-Host "  ChainRank - Stopping (HARD / wipe data)" -ForegroundColor Cyan
+    Write-Host "  Prima - Stopping (HARD / wipe data)" -ForegroundColor Cyan
 } else {
-    Write-Host "  ChainRank - Stopping (soft / keep data)" -ForegroundColor Cyan
+    Write-Host "  Prima - Stopping (soft / keep data)" -ForegroundColor Cyan
 }
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
@@ -44,7 +44,7 @@ Write-Host ""
 # ─────────────────────────────────────────────
 if ($Hard) {
     Write-Host "[2/4] Tearing down Fabric Network (removing volumes)..." -ForegroundColor Yellow
-    $chaincodeContainers = docker ps -aq --filter "name=chainrank.org"
+    $chaincodeContainers = docker ps -aq --filter "name=prima.org"
     if ($chaincodeContainers) { docker rm -f $chaincodeContainers 2>$null | Out-Null }
     & "$PROJECT_ROOT\fabric-network\stop-network.ps1"
     Write-Host "  Fabric network torn down (data wiped)" -ForegroundColor Green
@@ -63,7 +63,7 @@ if ($Hard) {
     Write-Host "  Database container removed (named volume kept unless -v)" -ForegroundColor Green
 } else {
     Write-Host "[3/4] Pausing PostgreSQL (data preserved)..." -ForegroundColor Yellow
-    docker stop chainrank_postgres_dev 2>$null | Out-Null
+    docker stop prima_postgres_dev 2>$null | Out-Null
     Write-Host "  Database stopped (volume preserved)" -ForegroundColor Green
 }
 Write-Host ""

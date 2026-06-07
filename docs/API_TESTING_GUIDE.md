@@ -1,8 +1,8 @@
-# API Testing Guide - ChainRank Backend MVP
+# API Testing Guide - Prima Backend MVP
 
 ## 📋 Overview
 
-This document provides comprehensive testing documentation for the ChainRank Backend API. All endpoints have been tested and verified as working.
+This document provides comprehensive testing documentation for the Prima Backend API. All endpoints have been tested and verified as working.
 
 **Test Suite Success Rate:** 100% (14/14 tests passed)  
 **Last Updated:** May 17, 2026  
@@ -43,7 +43,7 @@ This comprehensive test suite covers:
 
 1. Open Postman
 2. Click **Import**
-3. Select file: `docs/ChainRank.postman_collection.json`
+3. Select file: `docs/Prima.postman_collection.json`
 4. Collection will be loaded with all endpoints
 
 ### Environment Setup
@@ -406,7 +406,7 @@ When enabled:
 **Solution:** Ensure you're using the correct email/password. Default seed users:
 - `budi.santoso@prima.ipb` / `admin123` (dosen)
 - `admin@prima.ipb` / `admin123` (superadmin)
-- `sdm@chainrank.test` / `admin123` (admin SDM)
+- `sdm@prima.test` / `admin123` (admin SDM)
 - `ahmad.dahlan@prima.ipb` / `admin123` (pimpinan)
 
 ### Issue 2: "Missing required fields" on register
@@ -439,7 +439,7 @@ When enabled:
 $ node test-all-endpoints.js
 
 ═══════════════════════════════════════════════════════════
-     🧪 ChainRank API - Comprehensive Endpoint Tests
+     🧪 Prima API - Comprehensive Endpoint Tests
 ═══════════════════════════════════════════════════════════
 
 📌 TESTING: Authentication Endpoints
@@ -481,7 +481,7 @@ $ node test-all-endpoints.js
 
 ## 📁 Related Documentation
 
-- [Postman Collection](ChainRank.postman_collection.json) - Import into Postman
+- [Postman Collection](Prima.postman_collection.json) - Import into Postman
 - [FABRIC_ISSUES.md](../FABRIC_ISSUES.md) - Blockchain integration status
 - [plan.md](../plan.md) - Project roadmap and progress
 - [FABRIC_QUICKSTART.md](../FABRIC_QUICKSTART.md) - Fabric network management
