@@ -154,6 +154,7 @@ app.use('/api/v1/ref', require('./routes/v1/ref'));
 app.use('/api/v1/kegiatan', require('./routes/v1/kegiatan'));
 app.use('/api/v1/usulan', require('./routes/v1/usulan'));
 app.use('/api/v1/files', require('./routes/v1/files')); // Secure file download
+app.use('/api/v1/system', require('./routes/v1/system'));
 // app.use('/api/v1/users', require('./routes/v1/users')); // TODO: Week 2
 
 // Root endpoint
@@ -196,7 +197,7 @@ async function startServer() {
     if (!dbConnected) {
       console.warn('⚠️  Database connection failed, but server will start anyway');
     }
-    
+
     // Connect to Fabric network (non-blocking)
     if (fabricClient.isFabricEnabled()) {
       await fabricClient.connectGateway();

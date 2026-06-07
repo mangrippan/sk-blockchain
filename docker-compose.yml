@@ -65,7 +65,7 @@ services:
       # CORS
       CORS_ORIGIN: http://localhost:8080
       # Fabric (disabled in Docker for simplicity)
-      FABRIC_ENABLED: false
+      FABRIC_ENABLED: true
     ports:
       - "3000:3000"
     volumes:

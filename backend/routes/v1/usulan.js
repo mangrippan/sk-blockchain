@@ -710,13 +710,14 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
 
     // Get user's current jabatan
     const userResult = await client.query(
-      `SELECT u.jabatan_id, j.nama as jabatan_nama, j.tingkat
+      `SELECT u.jabatan_id, u.nip_nidn, j.nama as jabatan_nama, j.tingkat
        FROM sk.users u
        LEFT JOIN sk.ref_jabatan_akademik j ON u.jabatan_id = j.id
        WHERE u.id = $1`,
       [req.user.id]
     );
 
+    const dosenNipNidn = userResult.rows[0].nip_nidn;
     let currentJabatan = userResult.rows[0];
     
     // Default to jabatan_id = 1 (Tenaga Pengajar) if not assigned
@@ -867,8 +868,26 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     );
     const submitted = submitResult.rows[0];
 
-    // Blockchain recording removed - only record when SK is issued
-    // Usulan at 'pending' status is not final yet
+    // Record usulan creation on blockchain. The chaincode's lifecycle expects
+    // AjukanUsulanKenaikanPangkat to run first -- without it, TerbitkanSkKenaikanPangkat
+    // later fails with "Usulan does not exist".
+    let blockchainTxId = null;
+    if (fabricClient.isFabricEnabled()) {
+      try {
+        const hashNIP = crypto.createHash('sha256').update(dosenNipNidn).digest('hex');
+        blockchainTxId = await fabricClient.recordUsulanCreation(
+          usulan.id, hashNIP, totalPoin, targetJabatan.nama, referensi_id || null, snapshotHash
+        );
+        if (blockchainTxId) {
+          await client.query(
+            `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+            [blockchainTxId, usulan.id]
+          );
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
 
     // Audit log
     await client.query(
@@ -877,10 +896,10 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       [req.user.id, 'CREATE', 'usulan_kenaikan_pangkat', usulan.id, JSON.stringify({
         jabatan_tujuan: targetJabatan.nama,
         jabatan_tujuan_id: jabatan_tujuan_id,
-        total_poin: totalPoin, 
+        total_poin: totalPoin,
         kegiatan_count: kegiatanList.length,
         snapshot_hash: snapshotHash,
-        blockchain_tx: txResult ? 'success' : 'skipped',
+        blockchain_tx: blockchainTxId ? 'success' : 'skipped',
       })]
     );
 
@@ -951,16 +970,32 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       [req.params.id]
     );
 
-    // Blockchain recording removed - only record when SK is issued
-    // 'diproses' status is not final yet
+    // Record status transition (pending -> diproses) on blockchain. The
+    // chaincode requires this before TerbitkanSkKenaikanPangkat will accept
+    // the usulan (it checks status === 'diproses').
+    let blockchainTxId = null;
+    if (fabricClient.isFabricEnabled()) {
+      try {
+        blockchainTxId = await fabricClient.recordUsulanProcess(req.params.id, req.user.id);
+        if (blockchainTxId) {
+          await pool.query(
+            `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+            [blockchainTxId, req.params.id]
+          );
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
 
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'diproses', 
+        status: 'diproses',
         kegiatan_locked: lockResult.rowCount,
+        blockchain_tx: blockchainTxId ? 'success' : 'skipped',
       })]
     );
 
@@ -1185,8 +1220,8 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       console.warn(`⚠️  Warning: No kegiatan locked for usulan ${req.params.id}. This might indicate data inconsistency.`);
     }
 
-    // Record to blockchain ONLY when SK is issued (final state)
-    // This is the only blockchain transaction for usulan lifecycle
+    // Record SK issuance to blockchain (final lifecycle event for this usulan;
+    // AjukanUsulanKenaikanPangkat was already recorded when the usulan was submitted)
     const txResult = await fabricClient.recordUsulanSKIssued(
       req.params.id,
       sk_document_hash || 'no-document',

@@ -23,8 +23,11 @@ async function main() {
     }
     const ccp = JSON.parse(fs.readFileSync(CCP_PATH, 'utf8'));
 
-    // Create CA client
-    const caURL = ccp.certificateAuthorities['ca.org1.example.com'].url;
+    // Create CA client. Rewrite "localhost" to the IPv4 loopback literal --
+    // Docker Desktop on Windows publishes the CA port on 127.0.0.1 but not
+    // reliably on the IPv6 loopback (::1), and Node's https client resolves
+    // "localhost" to ::1 first, causing ETIMEDOUT.
+    const caURL = ccp.certificateAuthorities['ca.org1.example.com'].url.replace('localhost', '127.0.0.1');
     const ca = new FabricCAServices(caURL);
 
     // Create wallet
@@ -66,11 +69,22 @@ async function main() {
         affiliation: 'org1.department1',
         enrollmentID: 'appUser',
         role: 'client',
+        // The chaincode's _checkRole() reads a custom 'role' ABAC attribute
+        // from the certificate (ctx.clientIdentity.getAttributeValue('role'))
+        // to gate admin-only functions (TerbitkanSkKenaikanPangkat,
+        // ProsesUsulanKenaikanPangkat, TolakUsulanKenaikanPangkat,
+        // VerifyKegiatan, GetAllKegiatan). The backend uses this single
+        // identity for every transaction regardless of which end-user is
+        // acting -- access control per end-user is already enforced by the
+        // Express checkRole() middleware -- so this identity needs the
+        // highest-privilege ABAC role for the chaincode to accept those calls.
+        attrs: [{ name: 'role', value: 'admin_sdm', ecert: true }],
       }, adminUser);
 
       const enrollment = await ca.enroll({
         enrollmentID: 'appUser',
         enrollmentSecret: secret,
+        attr_reqs: [{ name: 'role', optional: false }],
       });
 
       const x509Identity = {

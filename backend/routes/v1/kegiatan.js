@@ -577,6 +577,7 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     // Record to blockchain ONLY for verified kegiatan
     if (status === 'verified' && fabricClient.isFabricEnabled()) {
       try {
+        console.log(`🔗 Submitting verified kegiatan ${id} to blockchain...`);
         const txId = await fabricClient.recordKegiatanCreation(
           id,
           kegiatanData.dosen_id,
@@ -585,13 +586,14 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
           kegiatanData.poin_kum
         );
         if (txId) {
-          // Save blockchain tx to database
           await pool.query(
             'UPDATE sk.kegiatan_dosen SET tx_id_fabric = $1 WHERE id = $2',
             [txId, id]
           );
           result.rows[0].tx_id_fabric = txId;
           console.log(`✅ Verified kegiatan recorded to blockchain: ${txId}`);
+        } else {
+          console.warn(`⚠️  Blockchain returned no txId for kegiatan ${id} (Fabric unavailable or contract null)`);
         }
       } catch (fabricErr) {
         console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
@@ -619,7 +621,6 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
  * Dosen harus membuat kegiatan baru jika ditolak
  */
 
-/*
 /**
  * @swagger
  * /api/v1/kegiatan/{id}/resubmit:
@@ -665,7 +666,8 @@ router.put('/:id/verify', auth, checkRole(['admin_sdm', 'pimpinan', 'superadmin'
  *         description: Parent kegiatan not found
  *       500:
  *         description: Failed to resubmit kegiatan
- *\/
+ */
+/*
 router.post('/:id/resubmit', auth, upload.single('dokumen'), validateUploadedFile, async (req, res) => {
   try {
     const { id: parentId } = req.params;

@@ -22,6 +22,16 @@ const WALLET_PATH = process.env.FABRIC_WALLET_PATH ||
 
 let gateway = null;
 let contract = null;
+let connectedIdentity = null;
+let connectedAt = null;
+
+// Tracks the outcome of the most recent transaction attempts so that
+// getConnectionStatus() can reflect actual write/read capability instead of
+// just the presence of cached gateway/contract objects (which stay non-null
+// even after the underlying peer connection has gone stale).
+let lastSuccessAt = null;
+let lastFailureAt = null;
+let lastError = null; // { message, code, at } — kept short, exposed via /system/status
 
 /**
  * Check if Fabric integration is enabled
@@ -46,7 +56,12 @@ async function connectGateway() {
       return null;
     }
 
-    const ccp = JSON.parse(fs.readFileSync(CONNECTION_PROFILE_PATH, 'utf8'));
+    // Rewrite "localhost" to the IPv4 loopback literal so grpc-js connects
+    // directly via its IP resolver, skipping DNS resolution altogether (a
+    // harmless micro-optimization). TLS hostname verification still passes
+    // via the profile's ssl-target-name-override/hostnameOverride.
+    const ccpRaw = fs.readFileSync(CONNECTION_PROFILE_PATH, 'utf8').replace(/localhost/g, '127.0.0.1');
+    const ccp = JSON.parse(ccpRaw);
     const wallet = await Wallets.newFileSystemWallet(WALLET_PATH);
 
     // Check if identity exists in wallet
@@ -67,26 +82,41 @@ async function connectGateway() {
       return null;
     }
 
-    // Connect with discovery disabled and asLocalhost for Windows development
     gateway = new Gateway();
     await gateway.connect(ccp, {
       wallet,
       identity: identityName,
-      discovery: { 
+      discovery: {
         enabled: false,
         asLocalhost: true
       }
     });
 
+    // gateway.connect() does not throw when the underlying peer/orderer gRPC
+    // connections fail (e.g. TLS handshake rejected due to a stale CA cert in
+    // the connection profile) -- it silently resolves with broken endpoints.
+    // Verify every endorser/committer actually reached connected:true so
+    // getConnectionStatus()/lastError reporting reflects reality.
     const network = await gateway.getNetwork(CHANNEL_NAME);
+    const channel = network.getChannel();
+    const endpoints = [...channel.getEndorsers(), ...channel.getCommitters()];
+    const broken = endpoints.filter(ep => !ep.connected);
+    if (broken.length > 0) {
+      throw new Error(`${broken.length}/${endpoints.length} Fabric service endpoint(s) not connected: ${broken.map(ep => ep.name).join(', ')}`);
+    }
+
     contract = network.getContract(CHAINCODE_NAME, 'KegiatanContract');
 
+    connectedIdentity = identityName;
+    connectedAt = new Date().toISOString();
     console.log(`✅ Connected to Fabric network as ${identityName} (contract: KegiatanContract)`);
     return contract;
   } catch (error) {
     console.error('❌ Failed to connect to Fabric network:', error.message);
     gateway = null;
     contract = null;
+    connectedIdentity = null;
+    connectedAt = null;
     return null;
   }
 }
@@ -94,6 +124,28 @@ async function connectGateway() {
 /**
  * Disconnect from Fabric network
  */
+/**
+ * Get current Fabric connection status
+ */
+function getConnectionStatus() {
+  // "Operational" means the most recent real transaction attempt succeeded —
+  // not merely that gateway/contract objects are cached. If no transaction has
+  // been attempted yet since startup, we don't claim to be connected.
+  const operational = lastSuccessAt !== null &&
+    (lastFailureAt === null || lastSuccessAt > lastFailureAt);
+  return {
+    enabled: FABRIC_ENABLED,
+    connected: FABRIC_ENABLED && gateway !== null && contract !== null && operational,
+    identity: connectedIdentity,
+    channel: CHANNEL_NAME,
+    chaincode: CHAINCODE_NAME,
+    connectedAt,
+    lastSuccessAt,
+    lastFailureAt,
+    lastError,
+  };
+}
+
 async function disconnectGateway() {
   if (gateway) {
     await gateway.disconnect();
@@ -104,18 +156,51 @@ async function disconnectGateway() {
 }
 
 /**
+ * Record a failed transaction attempt and tear down the (possibly broken)
+ * gateway/contract so the next call goes through a fresh connectGateway().
+ */
+async function handleTransactionFailure(error) {
+  lastFailureAt = new Date().toISOString();
+  lastError = { message: error.message, code: error.code || null, at: lastFailureAt };
+  try {
+    await disconnectGateway();
+  } catch (_) {
+    // Disconnecting an already-broken gateway can itself throw — ignore so it
+    // doesn't mask the original error, and fall through to the manual reset.
+  }
+  gateway = null;
+  contract = null;
+}
+
+/**
+ * Ensure contract is connected, reconnecting if necessary.
+ * Returns the contract or null if unavailable.
+ */
+async function getContract() {
+  if (!FABRIC_ENABLED) return null;
+  if (contract) return contract;
+
+  console.log('🔄 Fabric contract not connected, attempting reconnect...');
+  await connectGateway();
+  if (!contract) {
+    console.warn('⚠️  Fabric reconnect failed, skipping blockchain operation');
+  }
+  return contract;
+}
+
+/**
  * Submit a transaction to the blockchain (write operation)
  * Returns { txId, result } if Fabric is available, null otherwise
  */
 async function submitTransaction(functionName, ...args) {
-  if (!FABRIC_ENABLED || !contract) {
-    return null; // Fallback: skip blockchain
-  }
+  const activeContract = await getContract();
+  if (!activeContract) return null;
 
   try {
-    const transaction = contract.createTransaction(functionName);
+    const transaction = activeContract.createTransaction(functionName);
     const txId = transaction.getTransactionId();
     const result = await transaction.submit(...args);
+    lastSuccessAt = new Date().toISOString();
     return { txId, result: result.toString() };
   } catch (error) {
     console.error(`❌ Fabric submitTransaction(${functionName}) failed:`, error.message);
@@ -130,6 +215,7 @@ async function submitTransaction(functionName, ...args) {
         console.error(`   Error ${i}:`, err.message || err);
       });
     }
+    await handleTransactionFailure(error);
     return null;
   }
 }
@@ -139,15 +225,16 @@ async function submitTransaction(functionName, ...args) {
  * Returns null if Fabric is not available
  */
 async function evaluateTransaction(functionName, ...args) {
-  if (!FABRIC_ENABLED || !contract) {
-    return null;
-  }
+  const activeContract = await getContract();
+  if (!activeContract) return null;
 
   try {
-    const result = await contract.evaluateTransaction(functionName, ...args);
+    const result = await activeContract.evaluateTransaction(functionName, ...args);
+    lastSuccessAt = new Date().toISOString();
     return result.toString();
   } catch (error) {
     console.error(`❌ Fabric evaluateTransaction(${functionName}) failed:`, error.message);
+    await handleTransactionFailure(error);
     return null;
   }
 }
@@ -415,8 +502,10 @@ async function queryUsulanByHashNIP(hashNIP) {
 
 module.exports = {
   isFabricEnabled,
+  getConnectionStatus,
   connectGateway,
   disconnectGateway,
+  getContract,
   submitTransaction,
   evaluateTransaction,
   recordKegiatanCreation,
