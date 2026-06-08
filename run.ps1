@@ -49,7 +49,10 @@ function Invoke-SmokeTest {
     $backendOk = $false
     for ($i = 0; $i -lt 20; $i++) {
         try {
-            $h = Invoke-RestMethod -Uri "http://localhost:3000/health" -TimeoutSec 2 -ErrorAction Stop
+            # Use 127.0.0.1 (not localhost): the backend runs in WSL and Windows
+            # forwards the port on IPv4 only, while "localhost" resolves to ::1
+            # (IPv6) first and would time out even when the backend is healthy.
+            $h = Invoke-RestMethod -Uri "http://127.0.0.1:3000/health" -TimeoutSec 2 -ErrorAction Stop
             if ($h.status -eq "OK") { $backendOk = $true; break }
         } catch { Start-Sleep -Seconds 2 }
     }

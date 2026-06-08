@@ -17,7 +17,10 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // 127.0.0.1 (not localhost): the backend runs in WSL and is reachable
+        // on the IPv4 loopback that WSL forwards; "localhost" can resolve to
+        // ::1 (IPv6) first, which WSL does not forward, breaking the proxy.
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
     },

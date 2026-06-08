@@ -199,15 +199,11 @@ async function startServer() {
       console.warn('⚠️  Database connection failed, but server will start anyway');
     }
 
-    // Connect to Fabric network (non-blocking)
-    if (fabricClient.isFabricEnabled()) {
-      await fabricClient.connectGateway();
-      blockchainReconciliation.startReconciliationJob();
-    } else {
-      console.log('ℹ️  Blockchain integration disabled (set FABRIC_ENABLED=true to enable)');
-    }
-    
-    // Start Express server
+    // Start the Express server FIRST so /health is responsive immediately.
+    // Connecting the Fabric gateway can take several seconds on a freshly-built
+    // network; awaiting it before app.listen() used to delay the HTTP server
+    // past health-check / smoke-test windows even though Express itself was
+    // ready. The gateway connect now happens in the background (below).
     server = app.listen(PORT, () => {
       console.log('');
       console.log('='.repeat(50));
@@ -224,7 +220,20 @@ async function startServer() {
       console.log(`  POST /api/v1/auth/register - User registration`);
       console.log('');
     });
-    
+
+    // Connect to Fabric network in the BACKGROUND (non-blocking). connectGateway
+    // never throws (it logs and returns null on failure), and getContract()
+    // reconnects on demand, so a slow or failed initial connect must not hold
+    // the HTTP server hostage.
+    if (fabricClient.isFabricEnabled()) {
+      fabricClient.connectGateway().catch((err) => {
+        console.error('❌ Initial Fabric connect failed (will retry on demand):', err.message);
+      });
+      blockchainReconciliation.startReconciliationJob();
+    } else {
+      console.log('ℹ️  Blockchain integration disabled (set FABRIC_ENABLED=true to enable)');
+    }
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
