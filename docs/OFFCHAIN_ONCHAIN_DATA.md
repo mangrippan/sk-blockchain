@@ -24,6 +24,7 @@ Data yang **sudah final**, **sudah approved**, dan **butuh immutability** untuk 
 | `ref_kegiatan_kum` | Data master yang bisa berubah (update poin KUM) | ❌ Database Only |
 | `ref_kategori_kum` | Referensi kategori, bisa bertambah/berubah | ❌ Database Only |
 | `ref_jabatan_akademik` | Data jabatan, min KUM bisa diupdate | ❌ Database Only |
+| `riwayat_jabatan_dosen` | Histori perubahan jabatan dosen; bukti immutability ada di SK on-chain (via `usulan_id` + `tx_id_fabric`) | ❌ Database Only |
 
 **Mengapa?**
 - Data master sering di-update sesuai kebijakan baru
@@ -366,6 +367,7 @@ Saving: 72.5% cost reduction
 | Data Type | Storage | Immutable | Use Case |
 |-----------|---------|-----------|----------|
 | **Master Data** | ❌ Database | No | Reference, can be updated |
+| **Riwayat Jabatan Dosen** | ❌ Database | No | Histori perubahan jabatan; bukti final ada di SK on-chain |
 | **User Profiles** | ❌ Database | No | Privacy, can be updated |
 | **Kegiatan Unverified** | ❌ Database | No | Pending validation |
 | **Kegiatan Rejected** | ❌ Database | No | Invalid, not needed in blockchain |

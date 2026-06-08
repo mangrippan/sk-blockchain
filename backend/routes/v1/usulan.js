@@ -918,7 +918,11 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     res.status(201).json({
       message: 'Usulan berhasil diajukan',
       data: {
-        ...submitted || usulan,
+        ...(submitted || usulan),
+        // The snapshot above is read before the tx_id_fabric UPDATE, so reflect
+        // the just-written on-chain txId here (null when Fabric skipped/failed).
+        tx_id_fabric: blockchainTxId,
+        blockchain_status: blockchainStatus,
         snapshot_hash: snapshotHash,
         kegiatan_count: kegiatanList.length,
       },
@@ -1236,10 +1240,18 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     }
 
     // Update user's jabatan to jabatan_tujuan
+    // Capture the dosen's current jabatan first so we can record the history accurately.
+    let jabatanLamaId = usulan.jabatan_asal_id || null;
     if (usulan.jabatan_tujuan_id) {
+      const curJabatan = await client.query(
+        `SELECT jabatan_id FROM sk.users WHERE id = $1`,
+        [usulan.dosen_id]
+      );
+      jabatanLamaId = curJabatan.rows[0]?.jabatan_id ?? usulan.jabatan_asal_id ?? null;
+
       await client.query(
-        `UPDATE sk.users 
-         SET jabatan_id = $1, 
+        `UPDATE sk.users
+         SET jabatan_id = $1,
              jabatan_saat_ini = $2,
              updated_at = NOW()
          WHERE id = $3`,
@@ -1278,6 +1290,28 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     const blockchainStatus = !fabricClient.isFabricEnabled() ? 'skipped' : (txResult ? 'success' : 'failed');
     if (txResult) {
       await Usulan.updateBlockchainTx(req.params.id, txResult);
+    }
+
+    // Record jabatan change history (one row per promotion transaction).
+    // Linked to the usulan + blockchain txId as proof of the on-chain SK event.
+    if (usulan.jabatan_tujuan_id) {
+      await client.query(
+        `INSERT INTO sk.riwayat_jabatan_dosen
+           (dosen_id, jabatan_lama_id, jabatan_baru_id, usulan_id, tmt, sk_number, sk_date, tx_id_fabric, keterangan, changed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          usulan.dosen_id,
+          jabatanLamaId,
+          usulan.jabatan_tujuan_id,
+          req.params.id,
+          sk_date,
+          sk_number,
+          sk_date,
+          txResult || null,
+          `Kenaikan jabatan ke ${usulan.jabatan_tujuan_nama} via SK ${sk_number}`,
+          req.user.id,
+        ]
+      );
     }
 
     // Audit log

@@ -5,11 +5,23 @@
 
 const rateLimit = require('express-rate-limit');
 
+// Rate limiting can be disabled globally via env (e.g. for local dev/testing).
+// Defaults to enabled when RATE_LIMIT_ENABLED is unset.
+const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+
+// Pass-through middleware used when rate limiting is disabled.
+const noopLimiter = (req, res, next) => next();
+
+/**
+ * Wraps rateLimit() so the limiter becomes a no-op when disabled via env.
+ */
+const createLimiter = (options) => (rateLimitEnabled ? rateLimit(options) : noopLimiter);
+
 /**
  * Global rate limiter for all API endpoints
  * 100 requests per 15 minutes per IP
  */
-const globalLimiter = rateLimit({
+const globalLimiter = createLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   message: {
@@ -30,7 +42,7 @@ const globalLimiter = rateLimit({
  * Strict rate limiter for authentication endpoints
  * 5 login attempts per 15 minutes per IP
  */
-const authLimiter = rateLimit({
+const authLimiter = createLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 login attempts per windowMs
   message: {
@@ -55,7 +67,7 @@ const authLimiter = rateLimit({
  * Rate limiter for registration endpoint
  * 3 registrations per hour per IP
  */
-const registerLimiter = rateLimit({
+const registerLimiter = createLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3, // Limit each IP to 3 registrations per hour
   message: {
@@ -71,7 +83,7 @@ const registerLimiter = rateLimit({
  * Rate limiter for file uploads
  * 20 uploads per hour per user
  */
-const uploadLimiter = rateLimit({
+const uploadLimiter = createLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 20, // Limit to 20 uploads per hour
   message: {

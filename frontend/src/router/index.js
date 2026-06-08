@@ -75,22 +75,26 @@ const router = createRouter({
 })
 
 // Navigation guard
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  
+
   // Redirect to dashboard if logged in and trying to access login
   if (to.meta.requiresGuest && auth.isAuthenticated) {
     return '/'
   }
-  
+
   // Redirect to login if not authenticated
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return '/login'
   }
-  
-  // Check role-based access
-  if (to.meta.roles && !to.meta.roles.includes(auth.user?.role)) {
-    return '/'
+
+  // Tunggu pemuatan user pertama selesai sebelum menilai role,
+  // supaya refresh di halaman ber-role tidak salah redirect saat user masih null.
+  if (to.meta.roles) {
+    await auth.ready
+    if (!to.meta.roles.includes(auth.user?.role)) {
+      return '/'
+    }
   }
 })
 

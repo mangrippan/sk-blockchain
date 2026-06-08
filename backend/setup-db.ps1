@@ -75,6 +75,28 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[OK] Seed data loaded successfully!" -ForegroundColor Green
 
+# Run migrations (in order) - schema-hybrid.sql does NOT include these changes
+Write-Host "[MIGRATE] Applying migrations..." -ForegroundColor Cyan
+$migrations = @(
+    "migration-add-snapshot.sql",
+    "migration-revision-workflow.sql",
+    "migration-jabatan-hierarchy.sql"
+)
+foreach ($m in $migrations) {
+    $migPath = Join-Path $PSScriptRoot "..\database\$m"
+    if (!(Test-Path $migPath)) {
+        Write-Host "[ERROR] Migration file not found: $migPath" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "  - $m" -ForegroundColor Gray
+    & "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d prima_db -v ON_ERROR_STOP=1 -f $migPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Migration failed: $m" -ForegroundColor Red
+        exit 1
+    }
+}
+Write-Host "[OK] Migrations applied successfully!" -ForegroundColor Green
+
 # Verify setup
 Write-Host "`n[VERIFY] Checking database..." -ForegroundColor Cyan
 & "$PG_BIN\psql.exe" -U postgres -p $PG_PORT -d prima_db -c "\dt sk.*"

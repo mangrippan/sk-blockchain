@@ -7,6 +7,9 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token'))
   const loading = ref(false)
   const error = ref(null)
+  // Promise yang resolve setelah upaya pertama memuat user selesai.
+  // Router guard menunggunya supaya tidak menilai role saat user masih null.
+  const ready = ref(null)
 
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin_sdm')
@@ -34,13 +37,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchUser() {
     if (!token.value) return
-    
+
     try {
       const { data } = await authApi.getMe()
       user.value = data.user
     } catch (err) {
-      console.error('Failed to fetch user:', err)
-      logout()
+      // Hanya logout kalau token memang ditolak server (401/403).
+      // Error sementara (network, 5xx, 429, CORS) jangan menghapus session,
+      // supaya refresh saat backend belum siap tidak melempar user ke login.
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        logout()
+      } else {
+        console.error('Gagal memuat user (sementara), session dipertahankan:', err)
+      }
     }
   }
 
@@ -50,9 +59,12 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
   }
 
-  // Initialize user if token exists
+  // Initialize user if token exists. Simpan promise-nya agar router guard
+  // bisa menunggu user termuat sebelum mengevaluasi akses berbasis role.
   if (token.value && !user.value) {
-    fetchUser()
+    ready.value = fetchUser()
+  } else {
+    ready.value = Promise.resolve()
   }
 
   return {
@@ -60,6 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     loading,
     error,
+    ready,
     isAuthenticated,
     isAdmin,
     isPimpinan,
