@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Prima - Run All Services (Non-Interactive)
 # Starts: PostgreSQL, Fabric Network, Backend, Frontend
 # Usage: .\run.ps1 [-SkipFabric] [-SkipFrontend] [-Clean] [-Verify]

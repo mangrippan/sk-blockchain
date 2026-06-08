@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Clean Fabric Network - Remove all containers, volumes, and artifacts
 # Use this when you encounter ledger conflicts or need a fresh start
 # ============================================================

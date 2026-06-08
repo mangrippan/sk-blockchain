@@ -1,4 +1,4 @@
-# ============================================
+﻿# ============================================
 # Prima - Stop All Services
 # Usage: .\stop-all.ps1 [-Hard]
 #   (default) SOFT stop  : pauses Fabric, KEEPS all data (ledger + CouchDB)

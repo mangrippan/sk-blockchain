@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Pause Fabric Network (SOFT stop - preserves all data)
 # ============================================================
 # Stops the Fabric containers WITHOUT running `network.sh down`, so the

@@ -1,4 +1,4 @@
-# PostgreSQL Database Setup Script
+﻿# PostgreSQL Database Setup Script
 # Simple version without emojis
 
 param(

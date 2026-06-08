@@ -1,4 +1,4 @@
-# ============================================
+﻿# ============================================
 # Open WSL Terminal for Backend
 # ============================================
 # This script opens a WSL terminal at backend directory

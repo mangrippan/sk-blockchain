@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Resume Fabric Network (SOFT start - reuses preserved data)
 # ============================================================
 # Brings a PAUSED network (see pause-network.ps1) back up WITHOUT rebuilding:
