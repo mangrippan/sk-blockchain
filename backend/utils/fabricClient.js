@@ -95,8 +95,15 @@ async function connectGateway() {
     await gateway.connect(ccp, {
       wallet,
       identity: identityName,
+      // Service discovery ON: the SDK learns the channel's peers, orderers and
+      // endorsement layout directly from peer0.org1 instead of requiring a
+      // hand-maintained "channels"/"orderers" section in the connection profile
+      // (the auto-generated test-network profile has none, which left the query
+      // handler with no peer -> "Query failed. Errors: []"). asLocalhost remaps
+      // the discovered *.example.com:7051/7050/9051 addresses to the loopback
+      // ports Docker publishes, which WSL reaches.
       discovery: {
-        enabled: false,
+        enabled: true,
         asLocalhost: true
       }
     });
