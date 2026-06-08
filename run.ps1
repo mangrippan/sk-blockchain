@@ -21,12 +21,19 @@ $PROJECT_ROOT = $PSScriptRoot
 # that should be up is actually responding.
 # ─────────────────────────────────────────────
 function Test-Port {
-    # Detect a listener on ANY local address family -- IPv4 (127.0.0.1/0.0.0.0)
-    # AND IPv6 (::1/::). Vite binds to ::1 on Windows and Docker publishes on
-    # both families, so a 127.0.0.1-only probe (Test-NetConnection) would report
-    # "not listening" even when the service is up and serving over localhost.
+    # Attempt a real TCP connect on BOTH loopback families. This is the only
+    # probe that works for every way a port shows up here:
+    #   - native Windows listener (vite binds ::1)         -> connect via ::1
+    #   - Docker-published port (does NOT appear as a host listener, so
+    #     Get-NetTCPConnection misses it) (peer 7051)      -> connect via 127.0.0.1
+    #   - WSL2-forwarded port (wslhost on 127.0.0.1)       -> connect via 127.0.0.1
     param([int]$Port)
-    return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    foreach ($addr in @('127.0.0.1', '::1')) {
+        if (Test-NetConnection -ComputerName $addr -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue) {
+            return $true
+        }
+    }
+    return $false
 }
 
 function Invoke-SmokeTest {
