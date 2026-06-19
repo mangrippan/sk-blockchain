@@ -98,6 +98,56 @@ function cleanupFiles(files) {
   }
 }
 
+/**
+ * Canonical snapshot hash: SHA-256 over [{id, poin, hash}] ordered by kegiatan id.
+ * This MUST stay byte-for-byte identical between the moment the usulan is created
+ * (when the hash is locked on-chain) and every later verification, otherwise a
+ * legitimate snapshot would look tampered. Keep this the single source of truth.
+ * @param {Array<{id:string, poin:any, hash:string}>} rows
+ * @returns {string} hex SHA-256
+ */
+function computeSnapshotHash(rows) {
+  const data = rows.map((r) => ({ id: r.id, poin: r.poin, hash: r.hash }));
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
+
+/**
+ * Recompute the snapshot hash from the CURRENTLY persisted snapshot rows.
+ * Because poin_kum (DECIMAL(5,2)) and file_hash (VARCHAR(64)) come back with the
+ * same string representation they had at creation, this reproduces the original
+ * hash exactly — UNLESS the underlying kegiatan data was altered after submission,
+ * in which case the recomputed hash diverges from the value locked on the
+ * blockchain. That divergence is precisely how tampering is detected.
+ * @param {string} usulanId
+ * @param {object} db - pg pool or client
+ * @returns {Promise<string|null>} hash, or null if no snapshot rows exist
+ */
+async function recomputeSnapshotHash(usulanId, db = pool) {
+  const { rows } = await db.query(
+    `SELECT kegiatan_id AS id, poin_kum AS poin, file_hash AS hash
+       FROM sk.usulan_kegiatan_snapshot
+      WHERE usulan_id = $1
+      ORDER BY kegiatan_id`,
+    [usulanId]
+  );
+  if (rows.length === 0) return null;
+  return computeSnapshotHash(rows);
+}
+
+/**
+ * Re-hash the SK document straight from disk so the result reflects the file's
+ * CURRENT bytes (not the hash stored in the DB). Comparing this against the
+ * on-chain skHash detects any post-issuance modification/replacement of the file.
+ * @param {string} skDocumentUrl - e.g. "/uploads/sk/sk-123.pdf"
+ * @returns {Promise<string|null>} hash, or null if no file / missing on disk
+ */
+async function hashSkFileOnDisk(skDocumentUrl) {
+  if (!skDocumentUrl) return null;
+  const filePath = path.join(__dirname, '../../', skDocumentUrl);
+  if (!fs.existsSync(filePath)) return null;
+  return generateFileHash(filePath);
+}
+
 // All routes require authentication
 router.use(auth);
 
@@ -324,6 +374,13 @@ router.get('/:id/validate-blockchain', async (req, res) => {
       });
     }
 
+    // Recompute integrity hashes from LIVE data (NOT the stored DB columns) so that
+    // any post-submission change to kegiatan rows or the SK file is actually
+    // detectable. Comparing the stored columns against the chain is a no-op: both
+    // were written at the same instant and can never diverge on their own.
+    const recomputedSnapshotHash = await recomputeSnapshotHash(req.params.id);
+    const liveSkHash = await hashSkFileOnDisk(usulan.sk_document_url);
+
     // Initialize validation results
     const validationResults = {
       valid: true,
@@ -332,11 +389,14 @@ router.get('/:id/validate-blockchain', async (req, res) => {
         blockchainRecordExists: false,
         skHashMatches: false,
         snapshotHashMatches: false,
+        databaseSnapshotIntact: null, // live snapshot == snapshot_hash stored at submission
       },
       details: {
         databaseStatus: usulan.status,
         databaseSkHash: usulan.sk_document_hash,
         databaseSnapshotHash: usulan.snapshot_hash,
+        recomputedSnapshotHash,
+        liveSkHash,
         blockchainSkHash: null,
         blockchainSnapshotHash: null,
         inconsistencies: [],
@@ -345,14 +405,36 @@ router.get('/:id/validate-blockchain', async (req, res) => {
       errors: [],
     };
 
+    // Database-level integrity (runs even when blockchain is disabled): the hash
+    // recomputed from the current snapshot rows must equal the snapshot_hash that
+    // was stored when the usulan was submitted. A mismatch means the kegiatan data
+    // backing this usulan was modified after the fact.
+    if (usulan.snapshot_hash && recomputedSnapshotHash) {
+      const intact = recomputedSnapshotHash === usulan.snapshot_hash;
+      validationResults.checks.databaseSnapshotIntact = intact;
+      if (!intact) {
+        validationResults.valid = false;
+        validationResults.errors.push(
+          'Snapshot data no longer matches the hash recorded at submission - kegiatan data was modified'
+        );
+        validationResults.details.inconsistencies.push({
+          type: 'SNAPSHOT_DB_MISMATCH',
+          storedAtSubmission: usulan.snapshot_hash,
+          recomputedFromCurrentData: recomputedSnapshotHash,
+        });
+      }
+    }
+
     // Check if blockchain is enabled
     if (!fabricClient.isFabricEnabled()) {
       validationResults.checks.blockchainEnabled = false;
       validationResults.warnings.push('Blockchain integration is disabled');
-      
-      return res.json({
-        valid: true, // Valid in database-only mode
-        message: 'Blockchain validation skipped (blockchain disabled)',
+
+      return res.status(validationResults.valid ? 200 : 409).json({
+        valid: validationResults.valid,
+        message: validationResults.valid
+          ? 'Blockchain disabled - database-level integrity check passed'
+          : 'Blockchain disabled - database-level integrity check FAILED (tampering detected)',
         ...validationResults,
       });
     }
@@ -362,7 +444,7 @@ router.get('/:id/validate-blockchain', async (req, res) => {
     try {
       // 1. Check if blockchain record exists
       const blockchainUsulan = await fabricClient.getUsulan(req.params.id);
-      
+
       if (!blockchainUsulan) {
         validationResults.valid = false;
         validationResults.checks.blockchainRecordExists = false;
@@ -370,34 +452,43 @@ router.get('/:id/validate-blockchain', async (req, res) => {
       } else {
         validationResults.checks.blockchainRecordExists = true;
 
-        // 2. Verify SK document hash (only if SK has been issued)
+        // 2. Verify SK document hash against the blockchain using the hash RE-READ
+        //    from the file on disk, so a swapped/edited SK file is detected.
         if (usulan.status === 'sk_issued' && usulan.sk_document_hash) {
-          try {
-            const skHashVerification = await fabricClient.verifySkHash(
-              req.params.id,
-              usulan.sk_document_hash
+          if (!liveSkHash) {
+            validationResults.checks.skHashMatches = false;
+            validationResults.valid = false;
+            validationResults.errors.push(
+              'SK document file is missing on disk - cannot verify authenticity'
             );
-            
-            if (skHashVerification) {
-              validationResults.checks.skHashMatches = skHashVerification.isValid;
-              validationResults.details.blockchainSkHash = skHashVerification.storedHash;
-              
-              if (!skHashVerification.isValid) {
-                validationResults.valid = false;
-                validationResults.errors.push(
-                  'SK document hash mismatch - possible tampering detected'
-                );
-                validationResults.details.inconsistencies.push({
-                  type: 'SK_HASH_MISMATCH',
-                  database: usulan.sk_document_hash,
-                  blockchain: skHashVerification.storedHash,
-                });
+          } else {
+            try {
+              const skHashVerification = await fabricClient.verifySkHash(
+                req.params.id,
+                liveSkHash
+              );
+
+              if (skHashVerification) {
+                validationResults.checks.skHashMatches = skHashVerification.isValid;
+                validationResults.details.blockchainSkHash = skHashVerification.storedHash;
+
+                if (!skHashVerification.isValid) {
+                  validationResults.valid = false;
+                  validationResults.errors.push(
+                    'SK document hash mismatch - possible tampering detected'
+                  );
+                  validationResults.details.inconsistencies.push({
+                    type: 'SK_HASH_MISMATCH',
+                    liveFile: liveSkHash,
+                    blockchain: skHashVerification.storedHash,
+                  });
+                }
               }
+            } catch (hashError) {
+              validationResults.warnings.push(
+                `SK hash verification failed: ${hashError.message}`
+              );
             }
-          } catch (hashError) {
-            validationResults.warnings.push(
-              `SK hash verification failed: ${hashError.message}`
-            );
           }
         } else if (usulan.status === 'sk_issued') {
           validationResults.warnings.push('SK issued but no SK document hash in database');
@@ -406,18 +497,19 @@ router.get('/:id/validate-blockchain', async (req, res) => {
           validationResults.warnings.push('SK not yet issued - skipping SK hash validation');
         }
 
-        // 3. Verify snapshot hash (if usulan has snapshot)
-        if (usulan.snapshot_hash) {
+        // 3. Verify snapshot hash against the blockchain using the hash RECOMPUTED
+        //    from the current snapshot rows (detects tampering of kegiatan data).
+        if (recomputedSnapshotHash) {
           try {
             const snapshotVerification = await fabricClient.verifyUsulanSnapshot(
               req.params.id,
-              usulan.snapshot_hash
+              recomputedSnapshotHash
             );
-            
+
             if (snapshotVerification) {
               validationResults.checks.snapshotHashMatches = snapshotVerification.isValid;
               validationResults.details.blockchainSnapshotHash = snapshotVerification.storedHash;
-              
+
               if (!snapshotVerification.isValid) {
                 validationResults.valid = false;
                 validationResults.errors.push(
@@ -425,7 +517,7 @@ router.get('/:id/validate-blockchain', async (req, res) => {
                 );
                 validationResults.details.inconsistencies.push({
                   type: 'SNAPSHOT_HASH_MISMATCH',
-                  database: usulan.snapshot_hash,
+                  recomputedFromCurrentData: recomputedSnapshotHash,
                   blockchain: snapshotVerification.storedHash,
                 });
               }
@@ -608,29 +700,35 @@ router.get('/:id/audit', async (req, res) => {
       return dateA - dateB;
     });
 
-    // 8. Check integrity if blockchain is enabled and SK has been issued
+    // 8. Check integrity against the blockchain using hashes recomputed from LIVE
+    //    data (recomputed snapshot + re-read SK file), not the stored DB columns.
+    //    The snapshot is verified as soon as it exists; the SK hash only after issuance.
     let integrity = null;
-    if (fabricClient.isFabricEnabled() && usulan.status === 'sk_issued' && usulan.sk_document_hash) {
+    if (fabricClient.isFabricEnabled() && usulan.snapshot_hash) {
       try {
-        const skHashVerification = await fabricClient.verifySkHash(
-          req.params.id,
-          usulan.sk_document_hash
-        );
-        
+        const recomputedSnapshotHash = await recomputeSnapshotHash(req.params.id);
+        const liveSkHash = await hashSkFileOnDisk(usulan.sk_document_url);
+
         let snapshotHashVerification = null;
-        if (usulan.snapshot_hash) {
+        if (recomputedSnapshotHash) {
           snapshotHashVerification = await fabricClient.verifyUsulanSnapshot(
             req.params.id,
-            usulan.snapshot_hash
+            recomputedSnapshotHash
           );
+        }
+
+        let skHashVerification = null;
+        if (usulan.status === 'sk_issued' && usulan.sk_document_hash && liveSkHash) {
+          skHashVerification = await fabricClient.verifySkHash(req.params.id, liveSkHash);
         }
 
         integrity = {
           skHashValid: skHashVerification ? skHashVerification.isValid : null,
           snapshotHashValid: snapshotHashVerification ? snapshotHashVerification.isValid : null,
           blockchainSkHash: skHashVerification ? skHashVerification.storedHash : null,
-          databaseSkHash: usulan.sk_document_hash,
+          liveSkHash,
           blockchainSnapshotHash: snapshotHashVerification ? snapshotHashVerification.storedHash : null,
+          recomputedSnapshotHash,
           databaseSnapshotHash: usulan.snapshot_hash,
           message: (skHashVerification && !skHashVerification.isValid) || (snapshotHashVerification && !snapshotHashVerification.isValid)
             ? 'WARNING: Hash mismatch detected - possible data tampering!'
@@ -1015,14 +1113,12 @@ router.post('/', checkRole(['dosen']), uploadDokumen.any(), validateUploadedFile
       );
     }
 
-    // Calculate snapshot hash (sorted by kegiatan_id for consistency)
-    const snapshotData = kegiatanList.map(k => ({
-      id: k.id,
-      poin: k.poin_kum,
-      hash: k.file_hash,
-    }));
-    const snapshotString = JSON.stringify(snapshotData);
-    const snapshotHash = crypto.createHash('sha256').update(snapshotString).digest('hex');
+    // Calculate snapshot hash via the shared canonical helper so the value locked
+    // here is reproducible bit-for-bit by the verification endpoints later.
+    // kegiatanList is ordered by k.id (see query above), matching recomputeSnapshotHash.
+    const snapshotHash = computeSnapshotHash(
+      kegiatanList.map((k) => ({ id: k.id, poin: k.poin_kum, hash: k.file_hash }))
+    );
 
     // Update usulan with snapshot hash
     await client.query(
