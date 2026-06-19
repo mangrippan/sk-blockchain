@@ -133,8 +133,58 @@ async function validateUploadedFile(req, res, next) {
   }
 }
 
+/**
+ * Express middleware for validating MULTIPLE uploaded files (req.files)
+ * Use after a multer middleware that populates req.files (e.g. upload.any()/array()).
+ * Validates every file's magic bytes; on the first invalid file, deletes ALL
+ * uploaded files and responds 400 so the request never proceeds with a partial set.
+ *
+ * @example
+ * router.post('/upload', upload.any(), validateUploadedFiles, async (req, res) => {
+ *   // req.files are all validated
+ * });
+ */
+async function validateUploadedFiles(req, res, next) {
+  // Skip if no files uploaded
+  if (!req.files || req.files.length === 0) {
+    return next();
+  }
+
+  const deleteAll = () => {
+    for (const f of req.files) {
+      if (f.path && fs.existsSync(f.path)) {
+        fs.unlinkSync(f.path);
+      }
+    }
+  };
+
+  try {
+    for (const file of req.files) {
+      const validation = await validateFileMagicBytes(file.path);
+
+      if (!validation.isValid) {
+        deleteAll();
+        return res.status(400).json({
+          error: 'Invalid file type',
+          message: `${file.originalname}: ${validation.message}`,
+          detectedType: validation.detectedType,
+        });
+      }
+    }
+
+    next();
+  } catch (error) {
+    deleteAll();
+    return res.status(500).json({
+      error: 'File validation failed',
+      message: error.message,
+    });
+  }
+}
+
 module.exports = {
   validateFileMagicBytes,
   validateUploadedFile,
+  validateUploadedFiles,
   ALLOWED_TYPES,
 };

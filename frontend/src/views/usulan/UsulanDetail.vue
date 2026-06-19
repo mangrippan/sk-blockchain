@@ -141,6 +141,47 @@
         </div>
       </div>
 
+      <!-- Dokumen Administrasi -->
+      <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">
+          Dokumen Administrasi
+          <span v-if="dokumenList.length > 0" class="text-sm font-normal text-gray-500">
+            ({{ dokumenList.length }} dokumen)
+          </span>
+        </h2>
+
+        <div v-if="loadingDokumen" class="text-gray-500 text-sm">Memuat dokumen...</div>
+
+        <div v-else-if="dokumenList.length === 0" class="text-gray-500 text-sm">
+          Tidak ada dokumen administrasi yang terlampir pada usulan ini
+        </div>
+
+        <div v-else class="divide-y divide-gray-100">
+          <div
+            v-for="dok in dokumenList"
+            :key="dok.id"
+            class="flex items-center justify-between py-3"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900">
+                {{ dok.jenis_nama }}
+                <span v-if="dok.is_required" class="text-red-600">*</span>
+              </p>
+              <p class="text-xs text-gray-500 truncate">
+                {{ dok.file_name }}
+                <span v-if="dok.file_size"> · {{ formatFileSize(dok.file_size) }}</span>
+              </p>
+            </div>
+            <button
+              @click="downloadDokumen(dok)"
+              class="ml-4 shrink-0 text-sm text-blue-600 hover:text-blue-800"
+            >
+              Unduh
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Admin Actions -->
       <div v-if="auth.canVerify && usulan.status === 'pending'" class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Aksi Admin</h2>
@@ -421,6 +462,8 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUsulanStore } from '@/stores/usulan'
 import { usulanApi } from '@/api/usulan'
+import api from '@/api/axios'
+import { toast } from 'vue-sonner'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 
@@ -432,6 +475,8 @@ const usulan = computed(() => store.currentUsulan)
 const auditTrail = ref([])
 const snapshotData = ref(null)
 const loadingSnapshot = ref(false)
+const dokumenList = ref([])
+const loadingDokumen = ref(false)
 const sortOrder = ref('asc') // 'asc' = oldest first, 'desc' = newest first
 const showTolakModal = ref(false)
 const catatanPenolakan = ref('')
@@ -526,6 +571,46 @@ async function fetchSnapshot() {
   }
 }
 
+async function fetchDokumen() {
+  loadingDokumen.value = true
+  try {
+    const { data } = await usulanApi.getDokumen(route.params.id)
+    dokumenList.value = data.data || []
+  } catch (error) {
+    console.error('Failed to load documents:', error)
+    dokumenList.value = []
+  } finally {
+    loadingDokumen.value = false
+  }
+}
+
+async function downloadDokumen(dok) {
+  try {
+    // Files are served through an authenticated route, so fetch as a blob
+    // (a plain link would omit the JWT and get a 401).
+    const response = await api.get(`/files/dokumen/${dok.id}`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = dok.file_name || 'dokumen'
+    link.click()
+    // Defer revoke so the browser has started reading the blob; revoking
+    // synchronously after click() can abort the download in some browsers.
+    setTimeout(() => window.URL.revokeObjectURL(url), 0)
+  } catch (error) {
+    console.error('Failed to download document:', error)
+    toast.error('Gagal mengunduh dokumen')
+  }
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+}
+
 async function handleProses() {
   await store.proses(route.params.id)
   await store.fetchById(route.params.id)
@@ -581,7 +666,8 @@ onMounted(async () => {
   await store.fetchById(route.params.id)
   await Promise.all([
     fetchAuditTrail(),
-    fetchSnapshot()
+    fetchSnapshot(),
+    fetchDokumen()
   ])
 })
 </script>

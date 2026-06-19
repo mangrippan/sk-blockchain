@@ -5,11 +5,14 @@
     <!-- No more revision alert - kegiatan yang ditolak tidak bisa direvisi -->
     
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <LoadingSkeleton v-if="loading" variant="card" :count="4" />
+    <div
+      class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"
+      :class="visibleStats.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'"
+    >
+      <LoadingSkeleton v-if="loading" variant="card" :count="visibleStats.length" />
       <div
         v-else
-        v-for="stat in stats"
+        v-for="stat in visibleStats"
         :key="stat.label"
         class="bg-white rounded-lg border border-gray-200 p-6"
       >
@@ -54,11 +57,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { FileText, CheckCircle, Clock, Award } from 'lucide-vue-next'
 import { kegiatanApi } from '@/api/kegiatan'
+import { useAuthStore } from '@/stores/auth'
 import StatusBadge from '@/components/StatusBadge.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+
+const auth = useAuthStore()
 
 const stats = ref([
   { label: 'Total Kegiatan', value: '-', icon: FileText },
@@ -66,6 +72,13 @@ const stats = ref([
   { label: 'Terverifikasi', value: '-', icon: CheckCircle },
   { label: 'Total Poin KUM', value: '-', icon: Award },
 ])
+
+// Total Poin KUM tidak relevan untuk admin_sdm (tidak punya KUM pribadi)
+const visibleStats = computed(() =>
+  auth.isAdmin
+    ? stats.value.filter((s) => s.label !== 'Total Poin KUM')
+    : stats.value
+)
 
 const recentKegiatan = ref([])
 const loading = ref(false)

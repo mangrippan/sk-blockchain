@@ -10,7 +10,15 @@ export const usulanApi = {
   },
 
   create(data) {
-    return api.post('/usulan', data)
+    // Usulan creation is multipart (carries required administrative documents).
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData
+    return api.post('/usulan', data, isFormData
+      ? { headers: { 'Content-Type': 'multipart/form-data' } }
+      : undefined)
+  },
+
+  getDokumen(id) {
+    return api.get(`/usulan/${id}/dokumen`)
   },
 
   proses(id) {

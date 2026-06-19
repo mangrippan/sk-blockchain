@@ -15,7 +15,7 @@ const { hashFile: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
 const Usulan = require('../../models/Usulan');
 const { sanitizePagination, getPaginationMeta } = require('../../utils/pagination');
-const { validateUploadedFile } = require('../../middleware/fileValidation');
+const { validateUploadedFile, validateUploadedFiles } = require('../../middleware/fileValidation');
 
 // Configure multer for SK document upload
 const storage = multer.diskStorage({
@@ -46,6 +46,57 @@ const upload = multer({
     cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed'));
   }
 });
+
+// Configure multer for administrative document upload (dokumen_administrasi).
+// Files arrive under dynamic field names "dokumen_<jenisDokumenId>", so the handler
+// uses upload.any() and maps each file back to its jenis_dokumen via file.fieldname.
+const dokumenStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/dokumen');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
+    const ext = path.extname(file.originalname);
+    cb(null, `dok-${uniqueSuffix}${ext}`);
+  }
+});
+
+const uploadDokumen = multer({
+  storage: dokumenStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed'));
+  }
+});
+
+/**
+ * Remove uploaded document files from disk. Multer writes files before the route
+ * handler runs, so every failure path (validation, business-rule rejection, or a
+ * thrown error mid-transaction) must clean them up to avoid orphaned uploads.
+ * @param {Array} files - req.files array from multer
+ */
+function cleanupFiles(files) {
+  if (!files || files.length === 0) return;
+  for (const f of files) {
+    try {
+      if (f.path && fs.existsSync(f.path)) {
+        fs.unlinkSync(f.path);
+      }
+    } catch (err) {
+      console.warn('⚠️  Failed to clean up uploaded file:', f.path, err.message);
+    }
+  }
+}
 
 // All routes require authentication
 router.use(auth);
@@ -609,6 +660,60 @@ router.get('/:id/audit', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/v1/usulan/{id}/dokumen:
+ *   get:
+ *     summary: List administrative documents for an usulan
+ *     description: Retrieve the dokumen_administrasi attached to an usulan
+ *     tags: [Usulan]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: List of administrative documents
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to list documents
+ */
+router.get('/:id/dokumen', async (req, res) => {
+  try {
+    const usulan = await Usulan.findById(req.params.id);
+    if (!usulan) {
+      return res.status(404).json({ error: 'Usulan not found' });
+    }
+
+    // Dosen can only see their own; admin/pimpinan/auditor can see all
+    if (req.user.role === 'dosen' && usulan.dosen_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const result = await pool.query(
+      `SELECT d.id, d.jenis_dokumen_id, d.file_name, d.document_url,
+              d.file_hash, d.file_size, d.uploaded_at,
+              j.kode as jenis_kode, j.nama as jenis_nama, j.is_required
+       FROM sk.dokumen_administrasi d
+       JOIN sk.ref_jenis_dokumen j ON d.jenis_dokumen_id = j.id
+       WHERE d.usulan_id = $1 AND d.deleted_at IS NULL
+       ORDER BY j.is_required DESC, j.kode ASC`,
+      [req.params.id]
+    );
+
+    res.json({ data: result.rows, count: result.rows.length });
+  } catch (error) {
+    console.error('Error listing usulan documents:', error);
+    res.status(500).json({ error: 'Failed to list documents', message: error.message });
+  }
+});
+
 // ==========================================
 // GENERIC ROUTES - MUST COME AFTER SPECIFIC ROUTES ABOVE
 // ==========================================
@@ -689,7 +794,7 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Failed to create usulan
  */
-router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
+router.post('/', checkRole(['dosen']), uploadDokumen.any(), validateUploadedFiles, async (req, res) => {
   console.log('🔍 POST /usulan handler started for user:', req.user?.id);
   const client = await pool.connect();
   console.log('✅ Database client acquired');
@@ -705,7 +810,40 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     } = req.body;
 
     if (!jabatan_tujuan_id) {
+      await client.query('ROLLBACK');
+      cleanupFiles(req.files);
       return res.status(400).json({ error: 'jabatan_tujuan_id is required' });
+    }
+
+    // Validate administrative document completeness BEFORE doing any work.
+    // Map uploaded files by jenis_dokumen via the "dokumen_<id>" field name, then
+    // ensure every required (is_required) active jenis has a corresponding file.
+    const jenisDokumenResult = await client.query(
+      `SELECT id, kode, nama, is_required FROM sk.ref_jenis_dokumen
+       WHERE is_active = true`
+    );
+    const validJenisIds = new Set(jenisDokumenResult.rows.map((j) => j.id));
+
+    const filesByJenis = {};
+    for (const f of (req.files || [])) {
+      const match = /^dokumen_(\d+)$/.exec(f.fieldname);
+      if (match) {
+        filesByJenis[parseInt(match[1], 10)] = f;
+      }
+    }
+
+    const missingDokumen = jenisDokumenResult.rows
+      .filter((jenis) => jenis.is_required && !filesByJenis[jenis.id])
+      .map((jenis) => jenis.nama);
+
+    if (missingDokumen.length > 0) {
+      await client.query('ROLLBACK');
+      cleanupFiles(req.files);
+      return res.status(400).json({
+        error: 'Dokumen administrasi belum lengkap',
+        message: `Dokumen wajib berikut belum diunggah: ${missingDokumen.join(', ')}`,
+        missing: missingDokumen,
+      });
     }
 
     // Get user's current jabatan
@@ -741,7 +879,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     
     if (!validation.is_valid) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      cleanupFiles(req.files);
+      return res.status(400).json({
         error: 'Invalid jabatan target',
         message: validation.message,
         current_jabatan: validation.current_jabatan,
@@ -775,7 +914,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
 
     if (kegiatanList.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      cleanupFiles(req.files);
+      return res.status(400).json({
         error: 'No available kegiatan found',
         message: 'You must have verified kegiatan that have not been used in a previous usulan'
       });
@@ -784,7 +924,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     // Check if KUM meets minimum requirement
     if (totalPoin < parseFloat(targetJabatan.min_kum)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      cleanupFiles(req.files);
+      return res.status(400).json({
         error: 'Insufficient KUM',
         message: `You have ${totalPoin} KUM, but ${targetJabatan.nama} requires minimum ${targetJabatan.min_kum} KUM`,
         current_kum: totalPoin,
@@ -821,6 +962,37 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
         [referensi_id, usulan.id]
       );
     }
+
+    // Persist administrative documents (required + any valid optional). Each file
+    // was hashed/validated above; store the hash + size for integrity tracking.
+    let dokumenCount = 0;
+    const persistedPaths = new Set();
+    for (const [jenisIdStr, file] of Object.entries(filesByJenis)) {
+      const jenisId = parseInt(jenisIdStr, 10);
+      if (!validJenisIds.has(jenisId)) continue; // ignore unknown/inactive jenis
+      const fileHash = await generateFileHash(file.path);
+      await client.query(
+        `INSERT INTO sk.dokumen_administrasi (
+          usulan_id, jenis_dokumen_id, file_name, document_url, file_hash, file_size, uploaded_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          usulan.id,
+          jenisId,
+          file.originalname,
+          `/uploads/dokumen/${file.filename}`,
+          fileHash,
+          file.size,
+          req.user.id,
+        ]
+      );
+      persistedPaths.add(file.path);
+      dokumenCount++;
+    }
+
+    // Remove any uploaded file that was NOT persisted (extra/unknown field names,
+    // inactive jenis, or duplicate field names where only the last file is kept).
+    // Multer already wrote these to disk; without this they would be orphaned.
+    cleanupFiles((req.files || []).filter((f) => !persistedPaths.has(f.path)));
 
     // Mark kegiatan as used_in_usulan_id
     for (const kegiatan of kegiatanList) {
@@ -908,6 +1080,7 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
         jabatan_tujuan_id: jabatan_tujuan_id,
         total_poin: totalPoin,
         kegiatan_count: kegiatanList.length,
+        dokumen_count: dokumenCount,
         snapshot_hash: snapshotHash,
         blockchain_tx: blockchainStatus,
       })]
@@ -925,10 +1098,12 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
         blockchain_status: blockchainStatus,
         snapshot_hash: snapshotHash,
         kegiatan_count: kegiatanList.length,
+        dokumen_count: dokumenCount,
       },
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    cleanupFiles(req.files);
     console.error('Error creating usulan:', error);
     res.status(500).json({ error: 'Failed to create usulan', message: error.message });
   } finally {
