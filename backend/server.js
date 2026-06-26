@@ -1,5 +1,5 @@
 /**
- * ChainRank Backend Server
+ * Prima Backend Server
  * Main entry point for the application
  */
 
@@ -10,6 +10,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const { pool, testConnection } = require('./config/database');
 const fabricClient = require('./utils/fabricClient');
+const blockchainReconciliation = require('./utils/blockchainReconciliation');
 
 // ============================================
 // ENVIRONMENT VARIABLE VALIDATION
@@ -35,12 +36,12 @@ const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'ChainRank API Documentation',
+      title: 'Prima API Documentation',
       version: '1.0.0',
-      description: 'Backend API for ChainRank - Blockchain-based Academic Promotion Tracking System',
+      description: 'Backend API for Prima - Blockchain-based Academic Promotion Tracking System',
       contact: {
         name: 'API Support',
-        email: 'support@chainrank.com',
+        email: 'support@prima.com',
       },
     },
     servers: [
@@ -102,7 +103,7 @@ app.use((req, res, next) => {
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'ChainRank API Documentation',
+  customSiteTitle: 'Prima API Documentation',
 }));
 
 /**
@@ -154,12 +155,13 @@ app.use('/api/v1/ref', require('./routes/v1/ref'));
 app.use('/api/v1/kegiatan', require('./routes/v1/kegiatan'));
 app.use('/api/v1/usulan', require('./routes/v1/usulan'));
 app.use('/api/v1/files', require('./routes/v1/files')); // Secure file download
+app.use('/api/v1/system', require('./routes/v1/system'));
 // app.use('/api/v1/users', require('./routes/v1/users')); // TODO: Week 2
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'ChainRank API Server',
+    message: 'Prima API Server',
     version: '1.0.0',
     endpoints: {
       health: '/health',
@@ -196,19 +198,16 @@ async function startServer() {
     if (!dbConnected) {
       console.warn('⚠️  Database connection failed, but server will start anyway');
     }
-    
-    // Connect to Fabric network (non-blocking)
-    if (fabricClient.isFabricEnabled()) {
-      await fabricClient.connectGateway();
-    } else {
-      console.log('ℹ️  Blockchain integration disabled (set FABRIC_ENABLED=true to enable)');
-    }
-    
-    // Start Express server
+
+    // Start the Express server FIRST so /health is responsive immediately.
+    // Connecting the Fabric gateway can take several seconds on a freshly-built
+    // network; awaiting it before app.listen() used to delay the HTTP server
+    // past health-check / smoke-test windows even though Express itself was
+    // ready. The gateway connect now happens in the background (below).
     server = app.listen(PORT, () => {
       console.log('');
       console.log('='.repeat(50));
-      console.log(`🚀 ChainRank Backend Server`);
+      console.log(`🚀 Prima Backend Server`);
       console.log(`📡 Running on: http://localhost:${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🗄️  Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
@@ -221,7 +220,20 @@ async function startServer() {
       console.log(`  POST /api/v1/auth/register - User registration`);
       console.log('');
     });
-    
+
+    // Connect to Fabric network in the BACKGROUND (non-blocking). connectGateway
+    // never throws (it logs and returns null on failure), and getContract()
+    // reconnects on demand, so a slow or failed initial connect must not hold
+    // the HTTP server hostage.
+    if (fabricClient.isFabricEnabled()) {
+      fabricClient.connectGateway().catch((err) => {
+        console.error('❌ Initial Fabric connect failed (will retry on demand):', err.message);
+      });
+      blockchainReconciliation.startReconciliationJob();
+    } else {
+      console.log('ℹ️  Blockchain integration disabled (set FABRIC_ENABLED=true to enable)');
+    }
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -237,6 +249,7 @@ async function gracefulShutdown(signal) {
     });
   }
   try {
+    blockchainReconciliation.stopReconciliationJob();
     await fabricClient.disconnectGateway();
     await pool.end();
     console.log('🗄️  Database pool closed');

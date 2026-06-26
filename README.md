@@ -1,4 +1,4 @@
-# ChainRank - Sistem Kenaikan Pangkat Dosen Berbasis Blockchain 🎓
+# Prima - Sistem Kenaikan Pangkat Dosen Berbasis Blockchain 🎓
 
 > **Hybrid Blockchain System** untuk pencatatan dan verifikasi kenaikan pangkat dosen menggunakan **PostgreSQL** (database) + **Hyperledger Fabric** (blockchain).
 
@@ -92,8 +92,8 @@ Project ini memiliki **2 roadmap** berbeda sesuai kebutuhan:
                         └──────────────┘         └──────────────────┘
                         - 2 Peers (Org1, Org2)
                         - 1 Orderer
-                        - Channel: skchannel
-                        - Chaincode: chainrank
+                        - Channel: primachannel
+                        - Chaincode: prima
                         - CouchDB: Rich queries
 ```
 
@@ -157,7 +157,7 @@ docker-compose -f docker-compose.dev.yml up -d
 
 # Database akan running di port 5434
 # Credentials: postgres/postgres123
-# Database: chainrank_db
+# Database: prima_db
 ```
 
 #### 3. Setup Backend
@@ -215,21 +215,21 @@ docker ps | grep couchdb
 **CouchDB State Database:**
 - Enables rich queries (query by status, dosenId, date range)
 - Web UI for inspecting blockchain state data
-- Database: `skchannel_chainrank`
+- Database: `primachannel_prima`
 - Automatic index deployment from chaincode
 
 ### First Login
 
 **Admin SDM:**
-- Email: `dewi.lestari@chainrank.test`
+- Email: `dewi.lestari@prima.test`
 - Password: `password123`
 
 **Dosen:**
-- Email: `budi.santoso@chainrank.test`
+- Email: `budi.santoso@prima.test`
 - Password: `password123`
 
 **Superadmin:**
-- Email: `admin@chainrank.test`
+- Email: `admin@prima.test`
 - Password: `password123`
 
 ---
@@ -266,7 +266,7 @@ docker ps | grep couchdb
 #### System
 - `GET /api/v1/health` - Health check (database, blockchain, uptime)
 
-**Dokumentasi lengkap:** Lihat [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md) atau import [docs/ChainRank.postman_collection.json](docs/ChainRank.postman_collection.json) ke Postman.
+**Dokumentasi lengkap:** Lihat [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md) atau import [docs/Prima.postman_collection.json](docs/Prima.postman_collection.json) ke Postman.
 
 ---
 
@@ -275,7 +275,7 @@ docker ps | grep couchdb
 ### ✅ Completed (Week 1-2)
 - [x] Database setup dengan schema hybrid (8 tables)
 - [x] Hyperledger Fabric network running (2 peers, 1 orderer)
-- [x] Chaincode deployed (`chainrank` v1.0)
+- [x] Chaincode deployed (`prima` v1.0)
 - [x] Backend API (14 endpoints, 100% tested)
 - [x] Authentication & Authorization (JWT + RBAC)
 - [x] File upload & SHA-256 hashing
@@ -321,7 +321,7 @@ node test-api-kegiatan.js
 ```
 
 ### Using Postman
-1. Import [docs/ChainRank.postman_collection.json](docs/ChainRank.postman_collection.json)
+1. Import [docs/Prima.postman_collection.json](docs/Prima.postman_collection.json)
 2. Login dengan user test → Copy token
 3. Set token di Authorization header
 4. Test endpoints sesuai kebutuhan
@@ -350,10 +350,10 @@ Error: docker build failed: write unix @->/var/run/docker.sock: write: broken pi
 docker ps | grep postgres
 
 # Restart container jika perlu
-docker restart chainrank_postgres_dev
+docker restart prima_postgres_dev
 
 # Check logs
-docker logs chainrank_postgres_dev
+docker logs prima_postgres_dev
 ```
 
 ### Backend Port Already in Use
@@ -426,7 +426,7 @@ UsulanKenaikanPangkatBlockchain/
 │
 ├── docs/                 # Documentation
 │   ├── API_TESTING_GUIDE.md
-│   ├── ChainRank.postman_collection.json
+│   ├── Prima.postman_collection.json
 │   ├── FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md  # Troubleshooting chaincode
 │   ├── WEEK1_PROGRESS.md
 │   └── WEEK2_COMPLETION_SUMMARY.md
@@ -451,7 +451,7 @@ UsulanKenaikanPangkatBlockchain/
 
 ### API & Testing
 - **API Testing Guide:** [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)
-- **Postman Collection:** [docs/ChainRank.postman_collection.json](docs/ChainRank.postman_collection.json)
+- **Postman Collection:** [docs/Prima.postman_collection.json](docs/Prima.postman_collection.json)
 
 ### Troubleshooting
 - **🔥 Chaincode Quick Fix:** [QUICK_FIX_CHAINCODE.md](QUICK_FIX_CHAINCODE.md) ← Start here!

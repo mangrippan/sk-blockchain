@@ -25,11 +25,11 @@ async function main() {
     const adminHash = await bcrypt.hash('admin123', 12);
     
     const seedUsers = [
-      ['198501152010011001', 'Dr. Budi Santoso, M.Kom', 'budi.santoso@chainrank.test', dosenHash, 'dosen', 'Ilmu Komputer', 'Lektor'],
-      ['197803122003121001', 'Prof. Dr. Siti Rahayu, M.Si', 'siti.rahayu@chainrank.test', dosenHash, 'dosen', 'Matematika', 'Guru Besar'],
-      ['198207082006041002', 'Dr. Ahmad Wijaya, M.T', 'ahmad.wijaya@chainrank.test', dosenHash, 'pimpinan', 'Teknik Informatika', 'Lektor Kepala'],
-      ['197512012002121001', 'Dra. Dewi Lestari, M.Hum', 'dewi.lestari@chainrank.test', adminHash, 'admin_sdm', 'SDM', null],
-      ['197001011998031001', 'Admin Super', 'admin@chainrank.test', adminHash, 'superadmin', null, null],
+      ['198501152010011001', 'Dr. Budi Santoso, M.Kom', 'budi.santoso@prima.test', dosenHash, 'dosen', 'Ilmu Komputer', 'Lektor'],
+      ['197803122003121001', 'Prof. Dr. Siti Rahayu, M.Si', 'siti.rahayu@prima.test', dosenHash, 'dosen', 'Matematika', 'Guru Besar'],
+      ['198207082006041002', 'Dr. Ahmad Wijaya, M.T', 'ahmad.wijaya@prima.test', dosenHash, 'pimpinan', 'Teknik Informatika', 'Lektor Kepala'],
+      ['197512012002121001', 'Dra. Dewi Lestari, M.Hum', 'dewi.lestari@prima.test', adminHash, 'admin_sdm', 'SDM', null],
+      ['197001011998031001', 'Admin Super', 'admin@prima.test', adminHash, 'superadmin', null, null],
     ];
 
     for (const u of seedUsers) {
@@ -52,7 +52,7 @@ async function main() {
   }
 
   // Verify login
-  const testUser = await pool.query('SELECT password_hash FROM sk.users WHERE email = $1', ['budi.santoso@chainrank.test']);
+  const testUser = await pool.query('SELECT password_hash FROM sk.users WHERE email = $1', ['budi.santoso@prima.test']);
   if (testUser.rows.length > 0) {
     const match = await bcrypt.compare('dosen123', testUser.rows[0].password_hash);
     console.log('\nVerify budi.santoso login:', match ? 'OK' : 'FAIL');

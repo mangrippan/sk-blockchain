@@ -1,5 +1,5 @@
 # ============================================
-# ChainRank Full Stack Docker Compose
+# Prima Full Stack Docker Compose
 # ============================================
 # This docker-compose file orchestrates:
 # - PostgreSQL database
@@ -19,9 +19,9 @@ services:
   # ============================================
   postgres:
     image: postgres:15-alpine
-    container_name: chainrank_postgres
+    container_name: prima_postgres
     environment:
-      POSTGRES_DB: chainrank_db
+      POSTGRES_DB: prima_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres123
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
@@ -32,9 +32,9 @@ services:
       - ./database/schema-hybrid.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     networks:
-      - chainrank_network
+      - prima_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d chainrank_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d prima_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,12 +47,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: chainrank_backend
+    container_name: prima_backend
     environment:
       # Database
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: chainrank_db
+      DB_NAME: prima_db
       DB_USER: postgres
       DB_PASSWORD: postgres123
       DB_SCHEMA: sk
@@ -65,13 +65,13 @@ services:
       # CORS
       CORS_ORIGIN: http://localhost:8080
       # Fabric (disabled in Docker for simplicity)
-      FABRIC_ENABLED: false
+      FABRIC_ENABLED: true
     ports:
       - "3000:3000"
     volumes:
       - ./backend/uploads:/app/uploads
     networks:
-      - chainrank_network
+      - prima_network
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,11 +100,11 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: http://localhost:3000/api/v1
-    container_name: chainrank_frontend
+    container_name: prima_frontend
     ports:
       - "8080:80" # Nginx will serve on port 80 internally
     networks:
-      - chainrank_network
+      - prima_network
     depends_on:
       - backend
     restart: unless-stopped
@@ -113,9 +113,9 @@ services:
 # Networks
 # ============================================
 networks:
-  chainrank_network:
+  prima_network:
     driver: bridge
-    name: chainrank_network
+    name: prima_network
 
 # ============================================
 # Volumes
@@ -123,4 +123,4 @@ networks:
 volumes:
   postgres_data:
     driver: local
-    name: chainrank_postgres_data
+    name: prima_postgres_data

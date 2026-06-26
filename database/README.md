@@ -9,10 +9,10 @@
 psql -U postgres
 
 # In psql prompt:
-CREATE DATABASE chainrank_db;
+CREATE DATABASE prima_db;
 
 # Connect to the new database
-\c chainrank_db
+\c prima_db
 
 # Run schema
 \i 'C:/Users/riffa/source/repos/UsulanKenaikanPangkatBlockchain/database/schema.sql'
@@ -33,7 +33,7 @@ Edit `.env` file with your PostgreSQL password:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=chainrank_db
+DB_NAME=prima_db
 DB_USER=postgres
 DB_PASSWORD=your_actual_password_here
 ```
@@ -44,13 +44,13 @@ Schema includes 2 test users:
 
 ### Admin User
 - **NIP:** 199001012020121001
-- **Email:** admin@chainrank.test
+- **Email:** admin@prima.test
 - **Password:** admin123
 - **Role:** admin
 
 ### Dosen User
 - **NIP:** 199501012021031001
-- **Email:** dosen@chainrank.test
+- **Email:** dosen@prima.test
 - **Password:** dosen123
 - **Role:** dosen
 
@@ -122,12 +122,12 @@ Example:
 
 ### Backup
 ```powershell
-pg_dump -U postgres chainrank_db > backup_$(Get-Date -Format "yyyyMMdd").sql
+pg_dump -U postgres prima_db > backup_$(Get-Date -Format "yyyyMMdd").sql
 ```
 
 ### Restore
 ```powershell
-psql -U postgres chainrank_db < backup_20260426.sql
+psql -U postgres prima_db < backup_20260426.sql
 ```
 
 ## Troubleshooting
@@ -144,7 +144,7 @@ Start-Service -Name postgresql-x64-15
 ### Permission denied
 ```sql
 -- Grant permissions (run as postgres user)
-GRANT ALL PRIVILEGES ON DATABASE chainrank_db TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE prima_db TO postgres;
 ```
 
 ### Need to reset everything

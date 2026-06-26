@@ -63,7 +63,7 @@ const { authLimiter, registerLimiter } = require('../../middleware/rateLimiter')
  *           format: password
  *           description: User password
  *       example:
- *         email: "admin@chainrank.com"
+ *         email: "admin@prima.com"
  *         password: "admin123"
  *     
  *     RegisterRequest:
@@ -290,8 +290,8 @@ router.post('/login', authLimiter, async (req, res) => {
       process.env.JWT_SECRET,
       {
         expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-        issuer: 'chainrank-api',
-        audience: 'chainrank-app',
+        issuer: 'prima-api',
+        audience: 'prima-app',
         algorithm: 'HS256',
       }
     );

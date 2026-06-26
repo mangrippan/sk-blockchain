@@ -67,5 +67,5 @@ temp/
 *.bak
 
 # CCAAS generated packages (regenerated on each deploy)
-fabric-network/chainrank_ccaas.tar.gz
+fabric-network/prima_ccaas.tar.gz
 fabric-network/chaincode-ccaas/code.tar.gz

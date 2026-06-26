@@ -75,6 +75,38 @@
         </div>
       </div>
 
+      <!-- Kelengkapan Dokumen Administrasi -->
+      <div class="mt-6 border-t border-gray-200 pt-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-1">Kelengkapan Dokumen Administrasi</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Unggah dokumen berikut sebelum mengajukan usulan. Dokumen bertanda
+          <span class="text-red-600 font-medium">*</span> wajib diunggah.
+        </p>
+
+        <div v-if="loadingDokumen" class="text-sm text-gray-500">Memuat daftar dokumen...</div>
+
+        <div v-else class="space-y-4">
+          <div v-for="jenis in jenisDokumenList" :key="jenis.id">
+            <FileUpload
+              v-model="dokumenFiles[jenis.id]"
+              :label="jenis.nama"
+              :required="jenis.is_required"
+            />
+            <p v-if="jenis.deskripsi" class="mt-1 text-xs text-gray-500">{{ jenis.deskripsi }}</p>
+          </div>
+        </div>
+
+        <div
+          v-if="!loadingDokumen && missingDokumen.length > 0"
+          class="mt-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm"
+        >
+          <p class="font-medium">Dokumen wajib yang belum diunggah:</p>
+          <ul class="list-disc list-inside mt-1">
+            <li v-for="nama in missingDokumen" :key="nama">{{ nama }}</li>
+          </ul>
+        </div>
+      </div>
+
       <div v-if="error" class="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
         {{ error }}
       </div>
@@ -82,7 +114,7 @@
       <div class="mt-6 flex gap-3">
         <button
           type="submit"
-          :disabled="isSubmitting || !nextJabatan || kumTotal < kumTarget"
+          :disabled="isSubmitting || !nextJabatan || kumTotal < kumTarget || missingDokumen.length > 0"
           class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {{ isSubmitting ? 'Mengajukan...' : 'Ajukan Usulan' }}
@@ -99,13 +131,15 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUsulanStore } from '@/stores/usulan'
 import { kegiatanApi } from '@/api/kegiatan'
+import { refApi } from '@/api/ref'
 import api from '@/api/axios'
 import ProgressBarKUM from '@/components/ProgressBarKUM.vue'
+import FileUpload from '@/components/FileUpload.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -119,9 +153,37 @@ const loadingJabatan = ref(false)
 const isSubmitting = ref(false)
 const error = ref(null)
 
+// Administrative documents (dokumen_administrasi)
+const jenisDokumenList = ref([])
+const loadingDokumen = ref(false)
+const dokumenFiles = reactive({}) // { [jenisDokumenId]: File | null }
+
+const missingDokumen = computed(() =>
+  jenisDokumenList.value
+    .filter((j) => j.is_required && !dokumenFiles[j.id])
+    .map((j) => j.nama)
+)
+
 const form = reactive({
   catatan: '',
 })
+
+async function loadDokumenTypes() {
+  loadingDokumen.value = true
+  try {
+    const { data } = await refApi.getDokumen()
+    jenisDokumenList.value = data.data || []
+    // Pre-seed reactive keys so v-model binding is reactive for every type
+    for (const jenis of jenisDokumenList.value) {
+      if (!(jenis.id in dokumenFiles)) dokumenFiles[jenis.id] = null
+    }
+  } catch (err) {
+    console.error('Failed to load jenis dokumen:', err)
+    jenisDokumenList.value = []
+  } finally {
+    loadingDokumen.value = false
+  }
+}
 
 async function loadJabatanData() {
   loadingJabatan.value = true
@@ -175,20 +237,29 @@ async function handleSubmit() {
     error.value = `KUM Anda (${kumTotal.value}) belum mencukupi. Minimal ${kumTarget.value} diperlukan.`
     return
   }
-  
+
+  if (missingDokumen.value.length > 0) {
+    error.value = `Dokumen wajib belum lengkap: ${missingDokumen.value.join(', ')}`
+    return
+  }
+
   isSubmitting.value = true
   error.value = null
-  
+
   try {
-    await usulanStore.create({
-      jabatan_tujuan_id: nextJabatan.value.id,
-      total_kum: kumTotal.value,
-      catatan: form.catatan || null,
-    })
+    const formData = new FormData()
+    formData.append('jabatan_tujuan_id', nextJabatan.value.id)
+    if (form.catatan) formData.append('catatan', form.catatan)
+    for (const jenis of jenisDokumenList.value) {
+      const file = dokumenFiles[jenis.id]
+      if (file) formData.append(`dokumen_${jenis.id}`, file)
+    }
+
+    await usulanStore.create(formData)
     router.push('/usulan')
   } catch (err) {
     console.error('Failed to create usulan:', err)
-    error.value = err.response?.data?.message || err.response?.data?.error || 
+    error.value = err.response?.data?.message || err.response?.data?.error ||
                   'Gagal mengajukan usulan. Silakan coba lagi.'
   } finally {
     isSubmitting.value = false
@@ -198,7 +269,8 @@ async function handleSubmit() {
 onMounted(async () => {
   await Promise.all([
     loadJabatanData(),
-    loadAvailableKUM()
+    loadAvailableKUM(),
+    loadDokumenTypes()
   ])
 })
 </script>

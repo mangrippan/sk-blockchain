@@ -47,7 +47,7 @@
 # Database Configuration (Remote Server)
 DB_HOST=your_actual_server_host_or_ip
 DB_PORT=5432
-DB_NAME=chainrank_db
+DB_NAME=prima_db
 DB_USER=your_actual_db_username
 DB_PASSWORD=your_actual_db_password
 DB_POOL_SIZE=10
@@ -96,7 +96,7 @@ You should see:
 ```
 ✅ Connected to PostgreSQL database
 🕐 Database server time: 2026-04-26T...
-🚀 ChainRank Backend Server
+🚀 Prima Backend Server
 📡 Running on: http://localhost:3000
 ```
 
@@ -121,7 +121,7 @@ Expected response:
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "admin@chainrank.test",
+    "email": "admin@prima.test",
     "password": "admin123"
   }'
 ```
@@ -135,7 +135,7 @@ Expected response:
     "id": 1,
     "nip": "199001012020121001",
     "nama": "Admin System",
-    "email": "admin@chainrank.test",
+    "email": "admin@prima.test",
     "role": "admin"
   }
 }
@@ -180,7 +180,7 @@ PORT=3001
 ### Database connection fails:
 - Check `.env` credentials
 - Verify server firewall allows connection
-- Test connection manually: `psql -h HOST -U USER -d chainrank_db`
+- Test connection manually: `psql -h HOST -U USER -d prima_db`
 
 ### npm command not found:
 ```powershell

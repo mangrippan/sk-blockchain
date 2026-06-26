@@ -12,8 +12,8 @@ const path = require('path');
 const fs = require('fs');
 
 // Configuration
-const CHANNEL_NAME = process.env.FABRIC_CHANNEL || 'skchannel';
-const CHAINCODE_NAME = process.env.FABRIC_CHAINCODE || 'chainrank';
+const CHANNEL_NAME = process.env.FABRIC_CHANNEL || 'primachannel';
+const CHAINCODE_NAME = process.env.FABRIC_CHAINCODE || 'prima';
 const FABRIC_ENABLED = process.env.FABRIC_ENABLED === 'true';
 const CONNECTION_PROFILE_PATH = process.env.FABRIC_CONNECTION_PROFILE || 
   path.resolve(__dirname, '../../fabric-config/connection-org1.json');
@@ -22,6 +22,25 @@ const WALLET_PATH = process.env.FABRIC_WALLET_PATH ||
 
 let gateway = null;
 let contract = null;
+let connectedIdentity = null;
+let connectedAt = null;
+
+// Tracks the outcome of the most recent transaction attempts so that
+// getConnectionStatus() can reflect actual write/read capability instead of
+// just the presence of cached gateway/contract objects (which stay non-null
+// even after the underlying peer connection has gone stale).
+let lastSuccessAt = null;
+let lastFailureAt = null;
+let lastError = null; // { message, code, at } — kept short, exposed via /system/status
+
+// Periodic background probe so lastSuccessAt/lastFailureAt stay fresh even
+// when no real user-triggered transaction has run recently -- this is what
+// closes the gap where /system/status reported connected:true for >19 hours
+// while every actual write silently failed (lastSuccessAt was simply never
+// updated because nothing had been attempted since the last real success).
+const LIVENESS_PROBE_INTERVAL_MS = parseInt(process.env.FABRIC_LIVENESS_INTERVAL_MS || '60000', 10);
+const LIVENESS_STALE_THRESHOLD_MS = LIVENESS_PROBE_INTERVAL_MS * 3;
+let livenessIntervalHandle = null;
 
 /**
  * Check if Fabric integration is enabled
@@ -46,7 +65,12 @@ async function connectGateway() {
       return null;
     }
 
-    const ccp = JSON.parse(fs.readFileSync(CONNECTION_PROFILE_PATH, 'utf8'));
+    // Rewrite "localhost" to the IPv4 loopback literal so grpc-js connects
+    // directly via its IP resolver, skipping DNS resolution altogether (a
+    // harmless micro-optimization). TLS hostname verification still passes
+    // via the profile's ssl-target-name-override/hostnameOverride.
+    const ccpRaw = fs.readFileSync(CONNECTION_PROFILE_PATH, 'utf8').replace(/localhost/g, '127.0.0.1');
+    const ccp = JSON.parse(ccpRaw);
     const wallet = await Wallets.newFileSystemWallet(WALLET_PATH);
 
     // Check if identity exists in wallet
@@ -67,26 +91,49 @@ async function connectGateway() {
       return null;
     }
 
-    // Connect with discovery disabled and asLocalhost for Windows development
     gateway = new Gateway();
     await gateway.connect(ccp, {
       wallet,
       identity: identityName,
-      discovery: { 
-        enabled: false,
+      // Service discovery ON: the SDK learns the channel's peers, orderers and
+      // endorsement layout directly from peer0.org1 instead of requiring a
+      // hand-maintained "channels"/"orderers" section in the connection profile
+      // (the auto-generated test-network profile has none, which left the query
+      // handler with no peer -> "Query failed. Errors: []"). asLocalhost remaps
+      // the discovered *.example.com:7051/7050/9051 addresses to the loopback
+      // ports Docker publishes, which WSL reaches.
+      discovery: {
+        enabled: true,
         asLocalhost: true
       }
     });
 
+    // gateway.connect() does not throw when the underlying peer/orderer gRPC
+    // connections fail (e.g. TLS handshake rejected due to a stale CA cert in
+    // the connection profile) -- it silently resolves with broken endpoints.
+    // Verify every endorser/committer actually reached connected:true so
+    // getConnectionStatus()/lastError reporting reflects reality.
     const network = await gateway.getNetwork(CHANNEL_NAME);
+    const channel = network.getChannel();
+    const endpoints = [...channel.getEndorsers(), ...channel.getCommitters()];
+    const broken = endpoints.filter(ep => !ep.connected);
+    if (broken.length > 0) {
+      throw new Error(`${broken.length}/${endpoints.length} Fabric service endpoint(s) not connected: ${broken.map(ep => ep.name).join(', ')}`);
+    }
+
     contract = network.getContract(CHAINCODE_NAME, 'KegiatanContract');
 
+    connectedIdentity = identityName;
+    connectedAt = new Date().toISOString();
+    startLivenessProbe();
     console.log(`✅ Connected to Fabric network as ${identityName} (contract: KegiatanContract)`);
     return contract;
   } catch (error) {
     console.error('❌ Failed to connect to Fabric network:', error.message);
     gateway = null;
     contract = null;
+    connectedIdentity = null;
+    connectedAt = null;
     return null;
   }
 }
@@ -94,7 +141,66 @@ async function connectGateway() {
 /**
  * Disconnect from Fabric network
  */
+/**
+ * Periodically exercise a real peer round-trip (independent of whatever user
+ * traffic is or isn't flowing) so lastSuccessAt/lastFailureAt/lastError never
+ * go stale. KegiatanExists() is used as the probe target because it's a plain
+ * getState() lookup that resolves to true/false and never throws "not found"
+ * -- any outcome other than a clean resolve means the peer round-trip itself
+ * is broken, which is exactly the liveness signal we want.
+ */
+function startLivenessProbe() {
+  if (!FABRIC_ENABLED || livenessIntervalHandle) return;
+  livenessIntervalHandle = setInterval(() => {
+    evaluateTransaction('KegiatanExists', 'liveness-probe-key').catch(() => {});
+  }, LIVENESS_PROBE_INTERVAL_MS);
+  // Don't let the probe keep the process alive on its own.
+  if (typeof livenessIntervalHandle.unref === 'function') {
+    livenessIntervalHandle.unref();
+  }
+}
+
+function stopLivenessProbe() {
+  if (livenessIntervalHandle) {
+    clearInterval(livenessIntervalHandle);
+    livenessIntervalHandle = null;
+  }
+}
+
+/**
+ * Get current Fabric connection status
+ */
+function getConnectionStatus() {
+  // "Connected" requires three independent signals to agree right now:
+  //   1. gateway/contract objects are cached (cheap, but stays non-null even
+  //      after the underlying peer connection has gone stale -- insufficient
+  //      on its own, see Finding #1 in docs/E2E_TEST_REPORT.md)
+  //   2. the most recent real transaction attempt succeeded, AND
+  //   3. that success is RECENT -- not just "happened at some point since
+  //      startup". The periodic liveness probe (see startLivenessProbe)
+  //      guarantees a real attempt lands at least every LIVENESS_PROBE_INTERVAL_MS,
+  //      so a stale lastSuccessAt now means the chain itself stopped responding,
+  //      not merely that nobody happened to submit a transaction recently.
+  const successAgeMs = lastSuccessAt !== null ? (Date.now() - new Date(lastSuccessAt).getTime()) : Infinity;
+  const recentlySuccessful = successAgeMs < LIVENESS_STALE_THRESHOLD_MS;
+  const operational = recentlySuccessful &&
+    (lastFailureAt === null || lastSuccessAt > lastFailureAt);
+  return {
+    enabled: FABRIC_ENABLED,
+    connected: FABRIC_ENABLED && gateway !== null && contract !== null && operational,
+    identity: connectedIdentity,
+    channel: CHANNEL_NAME,
+    chaincode: CHAINCODE_NAME,
+    connectedAt,
+    lastSuccessAt,
+    lastFailureAt,
+    lastError,
+    livenessProbeIntervalMs: LIVENESS_PROBE_INTERVAL_MS,
+  };
+}
+
 async function disconnectGateway() {
+  stopLivenessProbe();
   if (gateway) {
     await gateway.disconnect();
     gateway = null;
@@ -104,18 +210,51 @@ async function disconnectGateway() {
 }
 
 /**
+ * Record a failed transaction attempt and tear down the (possibly broken)
+ * gateway/contract so the next call goes through a fresh connectGateway().
+ */
+async function handleTransactionFailure(error) {
+  lastFailureAt = new Date().toISOString();
+  lastError = { message: error.message, code: error.code || null, at: lastFailureAt };
+  try {
+    await disconnectGateway();
+  } catch (_) {
+    // Disconnecting an already-broken gateway can itself throw — ignore so it
+    // doesn't mask the original error, and fall through to the manual reset.
+  }
+  gateway = null;
+  contract = null;
+}
+
+/**
+ * Ensure contract is connected, reconnecting if necessary.
+ * Returns the contract or null if unavailable.
+ */
+async function getContract() {
+  if (!FABRIC_ENABLED) return null;
+  if (contract) return contract;
+
+  console.log('🔄 Fabric contract not connected, attempting reconnect...');
+  await connectGateway();
+  if (!contract) {
+    console.warn('⚠️  Fabric reconnect failed, skipping blockchain operation');
+  }
+  return contract;
+}
+
+/**
  * Submit a transaction to the blockchain (write operation)
  * Returns { txId, result } if Fabric is available, null otherwise
  */
 async function submitTransaction(functionName, ...args) {
-  if (!FABRIC_ENABLED || !contract) {
-    return null; // Fallback: skip blockchain
-  }
+  const activeContract = await getContract();
+  if (!activeContract) return null;
 
   try {
-    const transaction = contract.createTransaction(functionName);
+    const transaction = activeContract.createTransaction(functionName);
     const txId = transaction.getTransactionId();
     const result = await transaction.submit(...args);
+    lastSuccessAt = new Date().toISOString();
     return { txId, result: result.toString() };
   } catch (error) {
     console.error(`❌ Fabric submitTransaction(${functionName}) failed:`, error.message);
@@ -130,6 +269,7 @@ async function submitTransaction(functionName, ...args) {
         console.error(`   Error ${i}:`, err.message || err);
       });
     }
+    await handleTransactionFailure(error);
     return null;
   }
 }
@@ -139,15 +279,37 @@ async function submitTransaction(functionName, ...args) {
  * Returns null if Fabric is not available
  */
 async function evaluateTransaction(functionName, ...args) {
-  if (!FABRIC_ENABLED || !contract) {
-    return null;
-  }
+  const activeContract = await getContract();
+  if (!activeContract) return null;
 
   try {
-    const result = await contract.evaluateTransaction(functionName, ...args);
+    const result = await activeContract.evaluateTransaction(functionName, ...args);
+    lastSuccessAt = new Date().toISOString();
     return result.toString();
   } catch (error) {
+    // fabric-network's SingleQueryHandler distinguishes two failure shapes:
+    //  - a peer actually responded to the proposal, but the chaincode itself
+    //    returned an error (e.g. "Usulan X does not exist") -- the SDK throws
+    //    `Object.assign(new Error(...), peerResponse)`, which carries the
+    //    peer response's own `isEndorsed: false` / `status` / `payload` props
+    //  - no peer could be reached/respond at all -- the SDK throws a plain
+    //    FabricError ("Query failed. Errors: ...") with none of those props
+    // Only the second case is an actual connectivity problem.
+    const isChaincodeResponseError = Object.prototype.hasOwnProperty.call(error, 'isEndorsed')
+      && error.isEndorsed === false;
+
+    if (isChaincodeResponseError) {
+      // The network is healthy and answered correctly -- the chaincode just
+      // returned a normal application-level error (e.g. "not found" for a
+      // ledger key that was never written, perhaps because the on-chain
+      // write failed at creation time, or a stale/garbage ID was queried).
+      // Don't tear down the gateway or pollute lastError with it.
+      console.warn(`⚠️  Fabric evaluateTransaction(${functionName}) chaincode error (not a connectivity issue):`, error.message);
+      lastSuccessAt = new Date().toISOString();
+      return null;
+    }
     console.error(`❌ Fabric evaluateTransaction(${functionName}) failed:`, error.message);
+    await handleTransactionFailure(error);
     return null;
   }
 }
@@ -415,8 +577,10 @@ async function queryUsulanByHashNIP(hashNIP) {
 
 module.exports = {
   isFabricEnabled,
+  getConnectionStatus,
   connectGateway,
   disconnectGateway,
+  getContract,
   submitTransaction,
   evaluateTransaction,
   recordKegiatanCreation,

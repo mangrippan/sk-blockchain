@@ -15,7 +15,7 @@ const { hashFile: generateFileHash } = require('../../utils/hashUtils');
 const fabricClient = require('../../utils/fabricClient');
 const Usulan = require('../../models/Usulan');
 const { sanitizePagination, getPaginationMeta } = require('../../utils/pagination');
-const { validateUploadedFile } = require('../../middleware/fileValidation');
+const { validateUploadedFile, validateUploadedFiles } = require('../../middleware/fileValidation');
 
 // Configure multer for SK document upload
 const storage = multer.diskStorage({
@@ -46,6 +46,107 @@ const upload = multer({
     cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed'));
   }
 });
+
+// Configure multer for administrative document upload (dokumen_administrasi).
+// Files arrive under dynamic field names "dokumen_<jenisDokumenId>", so the handler
+// uses upload.any() and maps each file back to its jenis_dokumen via file.fieldname.
+const dokumenStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/dokumen');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
+    const ext = path.extname(file.originalname);
+    cb(null, `dok-${uniqueSuffix}${ext}`);
+  }
+});
+
+const uploadDokumen = multer({
+  storage: dokumenStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed'));
+  }
+});
+
+/**
+ * Remove uploaded document files from disk. Multer writes files before the route
+ * handler runs, so every failure path (validation, business-rule rejection, or a
+ * thrown error mid-transaction) must clean them up to avoid orphaned uploads.
+ * @param {Array} files - req.files array from multer
+ */
+function cleanupFiles(files) {
+  if (!files || files.length === 0) return;
+  for (const f of files) {
+    try {
+      if (f.path && fs.existsSync(f.path)) {
+        fs.unlinkSync(f.path);
+      }
+    } catch (err) {
+      console.warn('⚠️  Failed to clean up uploaded file:', f.path, err.message);
+    }
+  }
+}
+
+/**
+ * Canonical snapshot hash: SHA-256 over [{id, poin, hash}] ordered by kegiatan id.
+ * This MUST stay byte-for-byte identical between the moment the usulan is created
+ * (when the hash is locked on-chain) and every later verification, otherwise a
+ * legitimate snapshot would look tampered. Keep this the single source of truth.
+ * @param {Array<{id:string, poin:any, hash:string}>} rows
+ * @returns {string} hex SHA-256
+ */
+function computeSnapshotHash(rows) {
+  const data = rows.map((r) => ({ id: r.id, poin: r.poin, hash: r.hash }));
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
+
+/**
+ * Recompute the snapshot hash from the CURRENTLY persisted snapshot rows.
+ * Because poin_kum (DECIMAL(5,2)) and file_hash (VARCHAR(64)) come back with the
+ * same string representation they had at creation, this reproduces the original
+ * hash exactly — UNLESS the underlying kegiatan data was altered after submission,
+ * in which case the recomputed hash diverges from the value locked on the
+ * blockchain. That divergence is precisely how tampering is detected.
+ * @param {string} usulanId
+ * @param {object} db - pg pool or client
+ * @returns {Promise<string|null>} hash, or null if no snapshot rows exist
+ */
+async function recomputeSnapshotHash(usulanId, db = pool) {
+  const { rows } = await db.query(
+    `SELECT kegiatan_id AS id, poin_kum AS poin, file_hash AS hash
+       FROM sk.usulan_kegiatan_snapshot
+      WHERE usulan_id = $1
+      ORDER BY kegiatan_id`,
+    [usulanId]
+  );
+  if (rows.length === 0) return null;
+  return computeSnapshotHash(rows);
+}
+
+/**
+ * Re-hash the SK document straight from disk so the result reflects the file's
+ * CURRENT bytes (not the hash stored in the DB). Comparing this against the
+ * on-chain skHash detects any post-issuance modification/replacement of the file.
+ * @param {string} skDocumentUrl - e.g. "/uploads/sk/sk-123.pdf"
+ * @returns {Promise<string|null>} hash, or null if no file / missing on disk
+ */
+async function hashSkFileOnDisk(skDocumentUrl) {
+  if (!skDocumentUrl) return null;
+  const filePath = path.join(__dirname, '../../', skDocumentUrl);
+  if (!fs.existsSync(filePath)) return null;
+  return generateFileHash(filePath);
+}
 
 // All routes require authentication
 router.use(auth);
@@ -273,6 +374,13 @@ router.get('/:id/validate-blockchain', async (req, res) => {
       });
     }
 
+    // Recompute integrity hashes from LIVE data (NOT the stored DB columns) so that
+    // any post-submission change to kegiatan rows or the SK file is actually
+    // detectable. Comparing the stored columns against the chain is a no-op: both
+    // were written at the same instant and can never diverge on their own.
+    const recomputedSnapshotHash = await recomputeSnapshotHash(req.params.id);
+    const liveSkHash = await hashSkFileOnDisk(usulan.sk_document_url);
+
     // Initialize validation results
     const validationResults = {
       valid: true,
@@ -281,11 +389,14 @@ router.get('/:id/validate-blockchain', async (req, res) => {
         blockchainRecordExists: false,
         skHashMatches: false,
         snapshotHashMatches: false,
+        databaseSnapshotIntact: null, // live snapshot == snapshot_hash stored at submission
       },
       details: {
         databaseStatus: usulan.status,
         databaseSkHash: usulan.sk_document_hash,
         databaseSnapshotHash: usulan.snapshot_hash,
+        recomputedSnapshotHash,
+        liveSkHash,
         blockchainSkHash: null,
         blockchainSnapshotHash: null,
         inconsistencies: [],
@@ -294,14 +405,36 @@ router.get('/:id/validate-blockchain', async (req, res) => {
       errors: [],
     };
 
+    // Database-level integrity (runs even when blockchain is disabled): the hash
+    // recomputed from the current snapshot rows must equal the snapshot_hash that
+    // was stored when the usulan was submitted. A mismatch means the kegiatan data
+    // backing this usulan was modified after the fact.
+    if (usulan.snapshot_hash && recomputedSnapshotHash) {
+      const intact = recomputedSnapshotHash === usulan.snapshot_hash;
+      validationResults.checks.databaseSnapshotIntact = intact;
+      if (!intact) {
+        validationResults.valid = false;
+        validationResults.errors.push(
+          'Snapshot data no longer matches the hash recorded at submission - kegiatan data was modified'
+        );
+        validationResults.details.inconsistencies.push({
+          type: 'SNAPSHOT_DB_MISMATCH',
+          storedAtSubmission: usulan.snapshot_hash,
+          recomputedFromCurrentData: recomputedSnapshotHash,
+        });
+      }
+    }
+
     // Check if blockchain is enabled
     if (!fabricClient.isFabricEnabled()) {
       validationResults.checks.blockchainEnabled = false;
       validationResults.warnings.push('Blockchain integration is disabled');
-      
-      return res.json({
-        valid: true, // Valid in database-only mode
-        message: 'Blockchain validation skipped (blockchain disabled)',
+
+      return res.status(validationResults.valid ? 200 : 409).json({
+        valid: validationResults.valid,
+        message: validationResults.valid
+          ? 'Blockchain disabled - database-level integrity check passed'
+          : 'Blockchain disabled - database-level integrity check FAILED (tampering detected)',
         ...validationResults,
       });
     }
@@ -311,7 +444,7 @@ router.get('/:id/validate-blockchain', async (req, res) => {
     try {
       // 1. Check if blockchain record exists
       const blockchainUsulan = await fabricClient.getUsulan(req.params.id);
-      
+
       if (!blockchainUsulan) {
         validationResults.valid = false;
         validationResults.checks.blockchainRecordExists = false;
@@ -319,34 +452,43 @@ router.get('/:id/validate-blockchain', async (req, res) => {
       } else {
         validationResults.checks.blockchainRecordExists = true;
 
-        // 2. Verify SK document hash (only if SK has been issued)
+        // 2. Verify SK document hash against the blockchain using the hash RE-READ
+        //    from the file on disk, so a swapped/edited SK file is detected.
         if (usulan.status === 'sk_issued' && usulan.sk_document_hash) {
-          try {
-            const skHashVerification = await fabricClient.verifySkHash(
-              req.params.id,
-              usulan.sk_document_hash
+          if (!liveSkHash) {
+            validationResults.checks.skHashMatches = false;
+            validationResults.valid = false;
+            validationResults.errors.push(
+              'SK document file is missing on disk - cannot verify authenticity'
             );
-            
-            if (skHashVerification) {
-              validationResults.checks.skHashMatches = skHashVerification.isValid;
-              validationResults.details.blockchainSkHash = skHashVerification.storedHash;
-              
-              if (!skHashVerification.isValid) {
-                validationResults.valid = false;
-                validationResults.errors.push(
-                  'SK document hash mismatch - possible tampering detected'
-                );
-                validationResults.details.inconsistencies.push({
-                  type: 'SK_HASH_MISMATCH',
-                  database: usulan.sk_document_hash,
-                  blockchain: skHashVerification.storedHash,
-                });
+          } else {
+            try {
+              const skHashVerification = await fabricClient.verifySkHash(
+                req.params.id,
+                liveSkHash
+              );
+
+              if (skHashVerification) {
+                validationResults.checks.skHashMatches = skHashVerification.isValid;
+                validationResults.details.blockchainSkHash = skHashVerification.storedHash;
+
+                if (!skHashVerification.isValid) {
+                  validationResults.valid = false;
+                  validationResults.errors.push(
+                    'SK document hash mismatch - possible tampering detected'
+                  );
+                  validationResults.details.inconsistencies.push({
+                    type: 'SK_HASH_MISMATCH',
+                    liveFile: liveSkHash,
+                    blockchain: skHashVerification.storedHash,
+                  });
+                }
               }
+            } catch (hashError) {
+              validationResults.warnings.push(
+                `SK hash verification failed: ${hashError.message}`
+              );
             }
-          } catch (hashError) {
-            validationResults.warnings.push(
-              `SK hash verification failed: ${hashError.message}`
-            );
           }
         } else if (usulan.status === 'sk_issued') {
           validationResults.warnings.push('SK issued but no SK document hash in database');
@@ -355,18 +497,19 @@ router.get('/:id/validate-blockchain', async (req, res) => {
           validationResults.warnings.push('SK not yet issued - skipping SK hash validation');
         }
 
-        // 3. Verify snapshot hash (if usulan has snapshot)
-        if (usulan.snapshot_hash) {
+        // 3. Verify snapshot hash against the blockchain using the hash RECOMPUTED
+        //    from the current snapshot rows (detects tampering of kegiatan data).
+        if (recomputedSnapshotHash) {
           try {
             const snapshotVerification = await fabricClient.verifyUsulanSnapshot(
               req.params.id,
-              usulan.snapshot_hash
+              recomputedSnapshotHash
             );
-            
+
             if (snapshotVerification) {
               validationResults.checks.snapshotHashMatches = snapshotVerification.isValid;
               validationResults.details.blockchainSnapshotHash = snapshotVerification.storedHash;
-              
+
               if (!snapshotVerification.isValid) {
                 validationResults.valid = false;
                 validationResults.errors.push(
@@ -374,7 +517,7 @@ router.get('/:id/validate-blockchain', async (req, res) => {
                 );
                 validationResults.details.inconsistencies.push({
                   type: 'SNAPSHOT_HASH_MISMATCH',
-                  database: usulan.snapshot_hash,
+                  recomputedFromCurrentData: recomputedSnapshotHash,
                   blockchain: snapshotVerification.storedHash,
                 });
               }
@@ -557,29 +700,35 @@ router.get('/:id/audit', async (req, res) => {
       return dateA - dateB;
     });
 
-    // 8. Check integrity if blockchain is enabled and SK has been issued
+    // 8. Check integrity against the blockchain using hashes recomputed from LIVE
+    //    data (recomputed snapshot + re-read SK file), not the stored DB columns.
+    //    The snapshot is verified as soon as it exists; the SK hash only after issuance.
     let integrity = null;
-    if (fabricClient.isFabricEnabled() && usulan.status === 'sk_issued' && usulan.sk_document_hash) {
+    if (fabricClient.isFabricEnabled() && usulan.snapshot_hash) {
       try {
-        const skHashVerification = await fabricClient.verifySkHash(
-          req.params.id,
-          usulan.sk_document_hash
-        );
-        
+        const recomputedSnapshotHash = await recomputeSnapshotHash(req.params.id);
+        const liveSkHash = await hashSkFileOnDisk(usulan.sk_document_url);
+
         let snapshotHashVerification = null;
-        if (usulan.snapshot_hash) {
+        if (recomputedSnapshotHash) {
           snapshotHashVerification = await fabricClient.verifyUsulanSnapshot(
             req.params.id,
-            usulan.snapshot_hash
+            recomputedSnapshotHash
           );
+        }
+
+        let skHashVerification = null;
+        if (usulan.status === 'sk_issued' && usulan.sk_document_hash && liveSkHash) {
+          skHashVerification = await fabricClient.verifySkHash(req.params.id, liveSkHash);
         }
 
         integrity = {
           skHashValid: skHashVerification ? skHashVerification.isValid : null,
           snapshotHashValid: snapshotHashVerification ? snapshotHashVerification.isValid : null,
           blockchainSkHash: skHashVerification ? skHashVerification.storedHash : null,
-          databaseSkHash: usulan.sk_document_hash,
+          liveSkHash,
           blockchainSnapshotHash: snapshotHashVerification ? snapshotHashVerification.storedHash : null,
+          recomputedSnapshotHash,
           databaseSnapshotHash: usulan.snapshot_hash,
           message: (skHashVerification && !skHashVerification.isValid) || (snapshotHashVerification && !snapshotHashVerification.isValid)
             ? 'WARNING: Hash mismatch detected - possible data tampering!'
@@ -606,6 +755,60 @@ router.get('/:id/audit', async (req, res) => {
   } catch (error) {
     console.error('Error getting audit trail:', error);
     res.status(500).json({ error: 'Failed to get audit trail', message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/usulan/{id}/dokumen:
+ *   get:
+ *     summary: List administrative documents for an usulan
+ *     description: Retrieve the dokumen_administrasi attached to an usulan
+ *     tags: [Usulan]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Usulan UUID
+ *     responses:
+ *       200:
+ *         description: List of administrative documents
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Usulan not found
+ *       500:
+ *         description: Failed to list documents
+ */
+router.get('/:id/dokumen', async (req, res) => {
+  try {
+    const usulan = await Usulan.findById(req.params.id);
+    if (!usulan) {
+      return res.status(404).json({ error: 'Usulan not found' });
+    }
+
+    // Dosen can only see their own; admin/pimpinan/auditor can see all
+    if (req.user.role === 'dosen' && usulan.dosen_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const result = await pool.query(
+      `SELECT d.id, d.jenis_dokumen_id, d.file_name, d.document_url,
+              d.file_hash, d.file_size, d.uploaded_at,
+              j.kode as jenis_kode, j.nama as jenis_nama, j.is_required
+       FROM sk.dokumen_administrasi d
+       JOIN sk.ref_jenis_dokumen j ON d.jenis_dokumen_id = j.id
+       WHERE d.usulan_id = $1 AND d.deleted_at IS NULL
+       ORDER BY j.is_required DESC, j.kode ASC`,
+      [req.params.id]
+    );
+
+    res.json({ data: result.rows, count: result.rows.length });
+  } catch (error) {
+    console.error('Error listing usulan documents:', error);
+    res.status(500).json({ error: 'Failed to list documents', message: error.message });
   }
 });
 
@@ -689,7 +892,7 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Failed to create usulan
  */
-router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
+router.post('/', checkRole(['dosen']), uploadDokumen.any(), validateUploadedFiles, async (req, res) => {
   console.log('🔍 POST /usulan handler started for user:', req.user?.id);
   const client = await pool.connect();
   console.log('✅ Database client acquired');
@@ -705,18 +908,52 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     } = req.body;
 
     if (!jabatan_tujuan_id) {
+      await client.query('ROLLBACK');
+      cleanupFiles(req.files);
       return res.status(400).json({ error: 'jabatan_tujuan_id is required' });
+    }
+
+    // Validate administrative document completeness BEFORE doing any work.
+    // Map uploaded files by jenis_dokumen via the "dokumen_<id>" field name, then
+    // ensure every required (is_required) active jenis has a corresponding file.
+    const jenisDokumenResult = await client.query(
+      `SELECT id, kode, nama, is_required FROM sk.ref_jenis_dokumen
+       WHERE is_active = true`
+    );
+    const validJenisIds = new Set(jenisDokumenResult.rows.map((j) => j.id));
+
+    const filesByJenis = {};
+    for (const f of (req.files || [])) {
+      const match = /^dokumen_(\d+)$/.exec(f.fieldname);
+      if (match) {
+        filesByJenis[parseInt(match[1], 10)] = f;
+      }
+    }
+
+    const missingDokumen = jenisDokumenResult.rows
+      .filter((jenis) => jenis.is_required && !filesByJenis[jenis.id])
+      .map((jenis) => jenis.nama);
+
+    if (missingDokumen.length > 0) {
+      await client.query('ROLLBACK');
+      cleanupFiles(req.files);
+      return res.status(400).json({
+        error: 'Dokumen administrasi belum lengkap',
+        message: `Dokumen wajib berikut belum diunggah: ${missingDokumen.join(', ')}`,
+        missing: missingDokumen,
+      });
     }
 
     // Get user's current jabatan
     const userResult = await client.query(
-      `SELECT u.jabatan_id, j.nama as jabatan_nama, j.tingkat
+      `SELECT u.jabatan_id, u.nip_nidn, j.nama as jabatan_nama, j.tingkat
        FROM sk.users u
        LEFT JOIN sk.ref_jabatan_akademik j ON u.jabatan_id = j.id
        WHERE u.id = $1`,
       [req.user.id]
     );
 
+    const dosenNipNidn = userResult.rows[0].nip_nidn;
     let currentJabatan = userResult.rows[0];
     
     // Default to jabatan_id = 1 (Tenaga Pengajar) if not assigned
@@ -740,7 +977,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     
     if (!validation.is_valid) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      cleanupFiles(req.files);
+      return res.status(400).json({
         error: 'Invalid jabatan target',
         message: validation.message,
         current_jabatan: validation.current_jabatan,
@@ -774,7 +1012,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
 
     if (kegiatanList.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      cleanupFiles(req.files);
+      return res.status(400).json({
         error: 'No available kegiatan found',
         message: 'You must have verified kegiatan that have not been used in a previous usulan'
       });
@@ -783,7 +1022,8 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     // Check if KUM meets minimum requirement
     if (totalPoin < parseFloat(targetJabatan.min_kum)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      cleanupFiles(req.files);
+      return res.status(400).json({
         error: 'Insufficient KUM',
         message: `You have ${totalPoin} KUM, but ${targetJabatan.nama} requires minimum ${targetJabatan.min_kum} KUM`,
         current_kum: totalPoin,
@@ -821,6 +1061,37 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       );
     }
 
+    // Persist administrative documents (required + any valid optional). Each file
+    // was hashed/validated above; store the hash + size for integrity tracking.
+    let dokumenCount = 0;
+    const persistedPaths = new Set();
+    for (const [jenisIdStr, file] of Object.entries(filesByJenis)) {
+      const jenisId = parseInt(jenisIdStr, 10);
+      if (!validJenisIds.has(jenisId)) continue; // ignore unknown/inactive jenis
+      const fileHash = await generateFileHash(file.path);
+      await client.query(
+        `INSERT INTO sk.dokumen_administrasi (
+          usulan_id, jenis_dokumen_id, file_name, document_url, file_hash, file_size, uploaded_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          usulan.id,
+          jenisId,
+          file.originalname,
+          `/uploads/dokumen/${file.filename}`,
+          fileHash,
+          file.size,
+          req.user.id,
+        ]
+      );
+      persistedPaths.add(file.path);
+      dokumenCount++;
+    }
+
+    // Remove any uploaded file that was NOT persisted (extra/unknown field names,
+    // inactive jenis, or duplicate field names where only the last file is kept).
+    // Multer already wrote these to disk; without this they would be orphaned.
+    cleanupFiles((req.files || []).filter((f) => !persistedPaths.has(f.path)));
+
     // Mark kegiatan as used_in_usulan_id
     for (const kegiatan of kegiatanList) {
       await client.query(
@@ -842,14 +1113,12 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       );
     }
 
-    // Calculate snapshot hash (sorted by kegiatan_id for consistency)
-    const snapshotData = kegiatanList.map(k => ({
-      id: k.id,
-      poin: k.poin_kum,
-      hash: k.file_hash,
-    }));
-    const snapshotString = JSON.stringify(snapshotData);
-    const snapshotHash = crypto.createHash('sha256').update(snapshotString).digest('hex');
+    // Calculate snapshot hash via the shared canonical helper so the value locked
+    // here is reproducible bit-for-bit by the verification endpoints later.
+    // kegiatanList is ordered by k.id (see query above), matching recomputeSnapshotHash.
+    const snapshotHash = computeSnapshotHash(
+      kegiatanList.map((k) => ({ id: k.id, poin: k.poin_kum, hash: k.file_hash }))
+    );
 
     // Update usulan with snapshot hash
     await client.query(
@@ -867,8 +1136,36 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     );
     const submitted = submitResult.rows[0];
 
-    // Blockchain recording removed - only record when SK is issued
-    // Usulan at 'pending' status is not final yet
+    // Record usulan creation on blockchain. The chaincode's lifecycle expects
+    // AjukanUsulanKenaikanPangkat to run first -- without it, TerbitkanSkKenaikanPangkat
+    // later fails with "Usulan does not exist".
+    //
+    // blockchainStatus distinguishes 'skipped' (Fabric disabled -- nothing was
+    // attempted) from 'failed' (Fabric enabled, attempted, returned no txId).
+    // This matters because tx_id_fabric is reused across this usulan's later
+    // lifecycle stages (proses/terbitkan-sk) -- a failed write here leaves the
+    // column at its previous (NULL) value, and a generic 'skipped' would be
+    // indistinguishable from "Fabric is simply turned off" in the audit trail.
+    let blockchainTxId = null;
+    let blockchainStatus = 'skipped';
+    if (fabricClient.isFabricEnabled()) {
+      blockchainStatus = 'failed';
+      try {
+        const hashNIP = crypto.createHash('sha256').update(dosenNipNidn).digest('hex');
+        blockchainTxId = await fabricClient.recordUsulanCreation(
+          usulan.id, hashNIP, totalPoin, targetJabatan.nama, referensi_id || null, snapshotHash
+        );
+        if (blockchainTxId) {
+          blockchainStatus = 'success';
+          await client.query(
+            `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+            [blockchainTxId, usulan.id]
+          );
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
 
     // Audit log
     await client.query(
@@ -877,10 +1174,11 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
       [req.user.id, 'CREATE', 'usulan_kenaikan_pangkat', usulan.id, JSON.stringify({
         jabatan_tujuan: targetJabatan.nama,
         jabatan_tujuan_id: jabatan_tujuan_id,
-        total_poin: totalPoin, 
+        total_poin: totalPoin,
         kegiatan_count: kegiatanList.length,
+        dokumen_count: dokumenCount,
         snapshot_hash: snapshotHash,
-        blockchain_tx: txResult ? 'success' : 'skipped',
+        blockchain_tx: blockchainStatus,
       })]
     );
 
@@ -889,13 +1187,19 @@ router.post('/', checkRole(['dosen', 'dosen_tetap']), async (req, res) => {
     res.status(201).json({
       message: 'Usulan berhasil diajukan',
       data: {
-        ...submitted || usulan,
+        ...(submitted || usulan),
+        // The snapshot above is read before the tx_id_fabric UPDATE, so reflect
+        // the just-written on-chain txId here (null when Fabric skipped/failed).
+        tx_id_fabric: blockchainTxId,
+        blockchain_status: blockchainStatus,
         snapshot_hash: snapshotHash,
         kegiatan_count: kegiatanList.length,
+        dokumen_count: dokumenCount,
       },
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    cleanupFiles(req.files);
     console.error('Error creating usulan:', error);
     res.status(500).json({ error: 'Failed to create usulan', message: error.message });
   } finally {
@@ -951,16 +1255,40 @@ router.put('/:id/proses', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), as
       [req.params.id]
     );
 
-    // Blockchain recording removed - only record when SK is issued
-    // 'diproses' status is not final yet
+    // Record status transition (pending -> diproses) on blockchain. The
+    // chaincode requires this before TerbitkanSkKenaikanPangkat will accept
+    // the usulan (it checks status === 'diproses').
+    //
+    // See the creation handler above for why blockchainStatus distinguishes
+    // 'skipped' from 'failed' -- a failed write here leaves tx_id_fabric at
+    // the creation-stage txId, which would otherwise be indistinguishable
+    // from a successful 'diproses' recording in the audit trail.
+    let blockchainTxId = null;
+    let blockchainStatus = 'skipped';
+    if (fabricClient.isFabricEnabled()) {
+      blockchainStatus = 'failed';
+      try {
+        blockchainTxId = await fabricClient.recordUsulanProcess(req.params.id, req.user.id);
+        if (blockchainTxId) {
+          blockchainStatus = 'success';
+          await pool.query(
+            `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+            [blockchainTxId, req.params.id]
+          );
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
 
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'PROCESS', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'diproses', 
+        status: 'diproses',
         kegiatan_locked: lockResult.rowCount,
+        blockchain_tx: blockchainStatus,
       })]
     );
 
@@ -1034,17 +1362,40 @@ router.put('/:id/tolak', checkRole(['admin_sdm', 'pimpinan', 'superadmin']), asy
       [req.params.id]
     );
 
-    // Blockchain recording removed - rejected usulan should not be in blockchain
-    // Only approved/final usulan (SK issued) will be recorded
+    // Record rejection on blockchain. Now that AjukanUsulanKenaikanPangkat
+    // runs at submission time, every usulan exists on-chain at 'pending' (or
+    // 'diproses'); leaving it there forever on rejection would make the
+    // on-chain record permanently disagree with the DB ('rejected'). The
+    // chaincode's TolakUsulanKenaikanPangkat accepts both of those statuses
+    // (see kegiatanContract.js _checkRole-gated state machine), so this is
+    // safe to call regardless of whether /proses ran first.
+    let blockchainTxId = null;
+    let blockchainStatus = 'skipped';
+    if (fabricClient.isFabricEnabled()) {
+      blockchainStatus = 'failed';
+      try {
+        blockchainTxId = await fabricClient.recordUsulanRejection(req.params.id, req.user.id, catatan_penolakan);
+        if (blockchainTxId) {
+          blockchainStatus = 'success';
+          await pool.query(
+            `UPDATE sk.usulan_kenaikan_pangkat SET tx_id_fabric = $1 WHERE id = $2`,
+            [blockchainTxId, req.params.id]
+          );
+        }
+      } catch (fabricErr) {
+        console.warn('⚠️  Blockchain recording failed (continuing without):', fabricErr.message);
+      }
+    }
 
     // Audit log
     await pool.query(
       `INSERT INTO sk.audit_logs (user_id, action, table_name, record_id, new_values)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [req.user.id, 'REJECT', 'usulan_kenaikan_pangkat', req.params.id, JSON.stringify({
-        status: 'rejected', 
-        catatan_penolakan, 
+        status: 'rejected',
+        catatan_penolakan,
         kegiatan_unlocked: unlockResult.rowCount,
+        blockchain_tx: blockchainStatus,
       })]
     );
 
@@ -1160,10 +1511,18 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
     }
 
     // Update user's jabatan to jabatan_tujuan
+    // Capture the dosen's current jabatan first so we can record the history accurately.
+    let jabatanLamaId = usulan.jabatan_asal_id || null;
     if (usulan.jabatan_tujuan_id) {
+      const curJabatan = await client.query(
+        `SELECT jabatan_id FROM sk.users WHERE id = $1`,
+        [usulan.dosen_id]
+      );
+      jabatanLamaId = curJabatan.rows[0]?.jabatan_id ?? usulan.jabatan_asal_id ?? null;
+
       await client.query(
-        `UPDATE sk.users 
-         SET jabatan_id = $1, 
+        `UPDATE sk.users
+         SET jabatan_id = $1,
              jabatan_saat_ini = $2,
              updated_at = NOW()
          WHERE id = $3`,
@@ -1185,15 +1544,45 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
       console.warn(`⚠️  Warning: No kegiatan locked for usulan ${req.params.id}. This might indicate data inconsistency.`);
     }
 
-    // Record to blockchain ONLY when SK is issued (final state)
-    // This is the only blockchain transaction for usulan lifecycle
+    // Record SK issuance to blockchain (final lifecycle event for this usulan;
+    // AjukanUsulanKenaikanPangkat was already recorded when the usulan was submitted).
+    //
+    // blockchainStatus distinguishes 'skipped'/'failed'/'success' explicitly --
+    // see the creation handler's comment for why this matters: tx_id_fabric
+    // already holds the 'diproses'-stage txId at this point, so a failed SK
+    // issuance leaves it populated with a *different* (stale) transaction,
+    // which previously made a failed issuance indistinguishable from a
+    // successful one when read back from the audit trail alone.
     const txResult = await fabricClient.recordUsulanSKIssued(
       req.params.id,
       sk_document_hash || 'no-document',
       req.user.id
     );
+    const blockchainStatus = !fabricClient.isFabricEnabled() ? 'skipped' : (txResult ? 'success' : 'failed');
     if (txResult) {
       await Usulan.updateBlockchainTx(req.params.id, txResult);
+    }
+
+    // Record jabatan change history (one row per promotion transaction).
+    // Linked to the usulan + blockchain txId as proof of the on-chain SK event.
+    if (usulan.jabatan_tujuan_id) {
+      await client.query(
+        `INSERT INTO sk.riwayat_jabatan_dosen
+           (dosen_id, jabatan_lama_id, jabatan_baru_id, usulan_id, tmt, sk_number, sk_date, tx_id_fabric, keterangan, changed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          usulan.dosen_id,
+          jabatanLamaId,
+          usulan.jabatan_tujuan_id,
+          req.params.id,
+          sk_date,
+          sk_number,
+          sk_date,
+          txResult || null,
+          `Kenaikan jabatan ke ${usulan.jabatan_tujuan_nama} via SK ${sk_number}`,
+          req.user.id,
+        ]
+      );
     }
 
     // Audit log
@@ -1206,7 +1595,7 @@ router.put('/:id/terbitkan-sk', checkRole(['admin_sdm', 'pimpinan', 'superadmin'
         sk_document_hash,
         jabatan_updated: usulan.jabatan_tujuan_nama,
         kegiatan_locked: true,
-        blockchain_tx: txResult ? 'success' : 'skipped',
+        blockchain_tx: blockchainStatus,
       })]
     );
 

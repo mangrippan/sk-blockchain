@@ -1,5 +1,5 @@
-# ============================================================
-# ChainRank Quick Start Script
+﻿# ============================================================
+# Prima Quick Start Script
 # Menjalankan semua komponen sistem secara otomatis
 # ============================================================
 
@@ -7,7 +7,7 @@ $ErrorActionPreference = "Continue"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  ChainRank Quick Start" -ForegroundColor Cyan
+Write-Host "  Prima Quick Start" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -18,13 +18,13 @@ $PROJECT_ROOT = $PSScriptRoot
 # ============================================
 Write-Host "[1/5] Starting PostgreSQL..." -ForegroundColor Yellow
 
-$pgContainer = docker ps -a --filter "name=chainrank_postgres_dev" --format "{{.Names}}"
+$pgContainer = docker ps -a --filter "name=prima_postgres_dev" --format "{{.Names}}"
 if ($pgContainer) {
-    $pgStatus = docker ps --filter "name=chainrank_postgres_dev" --format "{{.Status}}"
+    $pgStatus = docker ps --filter "name=prima_postgres_dev" --format "{{.Status}}"
     if ($pgStatus) {
         Write-Host "  ✅ PostgreSQL already running" -ForegroundColor Green
     } else {
-        docker start chainrank_postgres_dev | Out-Null
+        docker start prima_postgres_dev | Out-Null
         Start-Sleep -Seconds 3
         Write-Host "  ✅ PostgreSQL started" -ForegroundColor Green
     }
@@ -152,7 +152,7 @@ Write-Host "  All Services Started!" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Services running:" -ForegroundColor Cyan
-Write-Host "  🗄️  PostgreSQL: docker container chainrank_postgres_dev" -ForegroundColor White
+Write-Host "  🗄️  PostgreSQL: docker container prima_postgres_dev" -ForegroundColor White
 Write-Host "  ⛓️  Fabric Network: peers + orderer + chaincode" -ForegroundColor White
 Write-Host "  🔧 Backend API: http://localhost:3000" -ForegroundColor White
 Write-Host "  🎨 Frontend: http://localhost:5173" -ForegroundColor White

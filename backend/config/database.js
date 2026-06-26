@@ -9,7 +9,7 @@ const { Pool } = require('pg');
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT) || 5434, // FORCE 5434 for Docker (avoid conflict with PostgreSQL 15)
-  database: process.env.DB_NAME || 'chainrank_db',
+  database: process.env.DB_NAME || 'prima_db',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD,
   max: parseInt(process.env.DB_POOL_SIZE) || 10, // Maximum connections in pool

@@ -51,13 +51,13 @@ cd fabric-network
 
 ### Cek Status Chaincode:
 ```powershell
-docker ps --filter "name=chainrank"
+docker ps --filter "name=prima"
 ```
 
 ### View Chaincode Logs:
 ```powershell
-docker logs chainrank.org1.example.com
-docker logs chainrank.org2.example.com
+docker logs prima.org1.example.com
+docker logs prima.org2.example.com
 ```
 
 ## Perbedaan dengan Metode Standard
@@ -76,10 +76,10 @@ docker logs chainrank.org2.example.com
 CCAAS package **HARUS** memiliki struktur nested tar:
 
 ```
-chainrank_ccaas.tar.gz
-├── metadata.json         # {"type": "ccaas", "label": "chainrank_1.0"}
+prima_ccaas.tar.gz
+├── metadata.json         # {"type": "ccaas", "label": "prima_1.0"}
 └── code.tar.gz          # Inner tar
-    └── connection.json  # {"address": "chainrank.org1.example.com:9999", ...}
+    └── connection.json  # {"address": "prima.org1.example.com:9999", ...}
 ```
 
 ❌ **SALAH** (flat structure):
@@ -95,7 +95,7 @@ Script `start-network-ccaas.ps1` sudah diperbaiki untuk membuat struktur yang be
 
 ```powershell
 # Extract and check outer tar
-wsl -d Ubuntu -- tar tzf chainrank_ccaas.tar.gz
+wsl -d Ubuntu -- tar tzf prima_ccaas.tar.gz
 # Output seharusnya: metadata.json, code.tar.gz
 
 # Extract and check inner tar
@@ -112,25 +112,25 @@ ls code/  # Should show connection.json
 docker network ls | Select-String "fabric_test"
 
 # Restart container
-docker restart chainrank.org1.example.com
+docker restart prima.org1.example.com
 ```
 
 ### Connection error:
 ```powershell
 # Cek logs
-docker logs chainrank.org1.example.com
+docker logs prima.org1.example.com
 
 # Verify package ID
-docker exec chainrank.org1.example.com env | Select-String "CHAINCODE_ID"
+docker exec prima.org1.example.com env | Select-String "CHAINCODE_ID"
 ```
 
 ### Update chaincode code:
 ```powershell
 # 1. Stop containers
-docker stop chainrank.org1.example.com chainrank.org2.example.com
+docker stop prima.org1.example.com prima.org2.example.com
 
 # 2. Rebuild image
-docker build -t chainrank_ccaas:latest -f chaincode/Dockerfile chaincode
+docker build -t prima_ccaas:latest -f chaincode/Dockerfile chaincode
 
 # 3. Restart containers (package ID tetap sama)
 # Jalankan ulang start-network-ccaas.ps1 dari section "Start chaincode containers"
@@ -155,7 +155,7 @@ docker build -t chainrank_ccaas:latest -f chaincode/Dockerfile chaincode
          └────────────┬────────────┘
               ┌───────┴───────┐
     ┌─────────┴──────┐  ┌─────┴─────────┐
-    │ chainrank.org1 │  │ chainrank.org2│
+    │ prima.org1 │  │ prima.org2│
     │   (Container)  │  │   (Container) │
     └────────────────┘  └───────────────┘
          Built in Windows Docker
@@ -165,12 +165,12 @@ docker build -t chainrank_ccaas:latest -f chaincode/Dockerfile chaincode
 
 ```powershell
 # All Fabric containers
-docker ps --format "table {{.Names}}\t{{.Status}}" | Select-String "org|orderer|chainrank"
+docker ps --format "table {{.Names}}\t{{.Status}}" | Select-String "org|orderer|prima"
 
 # CouchDB
 curl http://localhost:5984/_utils  # Org1
 curl http://localhost:7984/_utils  # Org2
 
 # Chaincode health
-docker exec chainrank.org1.example.com ps aux
+docker exec prima.org1.example.com ps aux
 ```

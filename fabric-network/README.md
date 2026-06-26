@@ -25,7 +25,7 @@ cd fabric-network
 This will:
 - Start Fabric test-network (1 Org, 1 Peer, 1 Orderer, CA)
 - Create channel `mychannel`
-- Deploy `chainrank` chaincode
+- Deploy `prima` chaincode
 - Register & enroll `appUser` identity
 
 ### 3. Stop the Network
@@ -53,7 +53,7 @@ This will:
 │       │                                  │
 │  ┌──────────┐                           │
 │  │    CA    │  Channel: mychannel       │
-│  │   Org1   │  Chaincode: chainrank     │
+│  │   Org1   │  Chaincode: prima     │
 │  └──────────┘                           │
 └─────────────────────────────────────────┘
 ```

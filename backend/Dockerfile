@@ -1,5 +1,5 @@
 # ============================================
-# ChainRank Backend Dockerfile
+# Prima Backend Dockerfile
 # ============================================
 # Multi-stage build for production
 

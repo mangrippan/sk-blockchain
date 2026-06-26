@@ -1,5 +1,5 @@
 # ============================================
-# ChainRank Frontend Dockerfile
+# Prima Frontend Dockerfile
 # ============================================
 # Multi-stage build: Build Vue app → Serve with Nginx
 

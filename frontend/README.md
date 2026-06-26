@@ -1,6 +1,6 @@
-# ChainRank Frontend
+# Prima Frontend
 
-Frontend aplikasi ChainRank menggunakan **Vue 3** + **Vite** + **Tailwind CSS**.
+Frontend aplikasi Prima menggunakan **Vue 3** + **Vite** + **Tailwind CSS**.
 
 ## 🚀 Quick Start
 
@@ -45,8 +45,8 @@ src/
 
 | Role | Email | Password |
 |------|-------|----------|
-| Dosen | dosen@chainrank.test | dosen123 |
-| Admin SDM | admin@chainrank.test | admin123 |
+| Dosen | dosen@prima.test | dosen123 |
+| Admin SDM | admin@prima.test | admin123 |
 
 ## 📄 Pages
 

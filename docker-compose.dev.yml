@@ -5,11 +5,11 @@ version: "3.8"
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: chainrank_postgres_dev
+    container_name: prima_postgres_dev
     restart: unless-stopped
 
     environment:
-      POSTGRES_DB: chainrank_db
+      POSTGRES_DB: prima_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres123
       # MD5 auth for better compatibility with Node.js pg library
@@ -29,18 +29,18 @@ services:
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d chainrank_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d prima_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
     networks:
-      - chainrank_network
+      - prima_network
 
 networks:
-  chainrank_network:
+  prima_network:
     driver: bridge
 
 volumes:
   pgdata_dev:
-    name: chainrank_pgdata_dev
+    name: prima_pgdata_dev

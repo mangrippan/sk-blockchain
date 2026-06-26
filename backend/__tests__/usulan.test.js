@@ -5,9 +5,14 @@
 
 const request = require('supertest');
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const usulanRouter = require('../routes/v1/usulan');
 const { pool } = require('../config/database');
 const { createTestUser, generateTestToken } = require('./setup');
+
+// Valid PDF fixture (passes magic-byte validation)
+const VALID_PDF = path.join(__dirname, 'fixtures', 'test.pdf');
 
 // Create a minimal Express app for testing
 const app = express();
@@ -20,6 +25,7 @@ describe('Usulan Kenaikan Pangkat API', () => {
   let dosenToken;
   let adminToken;
   let createdUsulanId;
+  let requiredJenisIds = [];
 
   beforeAll(async () => {
     // Create test users
@@ -37,20 +43,48 @@ describe('Usulan Kenaikan Pangkat API', () => {
     });
     adminToken = generateTestToken(testAdmin.id, 'admin_sdm');
 
-    // Insert some verified kegiatan for this dosen to have KUM points
+    // Give the dosen a known starting position (Tenaga Pengajar, tingkat 1) so the
+    // jabatan-promotion validation has a defined current jabatan to validate against.
+    await pool.query(
+      `UPDATE sk.users SET jabatan_id = 1 WHERE id = $1`,
+      [testDosen.id]
+    );
+
+    // Insert some verified kegiatan for this dosen to have KUM points (150 total)
     await pool.query(
       `INSERT INTO sk.kegiatan_dosen (dosen_id, ref_kegiatan_id, deskripsi, poin_kum, status, file_name, file_path, file_hash)
        SELECT $1, rk.id, 'Test kegiatan for KUM', 50, 'verified', 'test.pdf', '/uploads/test.pdf', 'abc123hash'
        FROM sk.ref_kegiatan_kum rk WHERE rk.is_active = true LIMIT 3`,
       [testDosen.id]
     );
+
+    // Load the required document types so we can attach them on submission
+    const jenisResult = await pool.query(
+      `SELECT id FROM sk.ref_jenis_dokumen WHERE is_required = true AND is_active = true ORDER BY id`
+    );
+    requiredJenisIds = jenisResult.rows.map((r) => r.id);
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    if (createdUsulanId) {
-      await pool.query('DELETE FROM sk.usulan_kenaikan_pangkat WHERE id = $1', [createdUsulanId]);
+    // Remove document files written to disk during the create test (before the
+    // cascade delete removes their dokumen_administrasi rows).
+    const docRows = await pool.query(
+      `SELECT document_url FROM sk.dokumen_administrasi
+       WHERE usulan_id IN (SELECT id FROM sk.usulan_kenaikan_pangkat WHERE dosen_id = $1)`,
+      [testDosen.id]
+    );
+    for (const row of docRows.rows) {
+      const fp = path.join(__dirname, '..', row.document_url);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
     }
+
+    // Cleanup test data (riwayat_jabatan_dosen is created when an SK is issued and
+    // references both dosen_id and changed_by, so clear it before deleting users).
+    await pool.query('DELETE FROM sk.riwayat_jabatan_dosen WHERE dosen_id IN ($1, $2) OR changed_by IN ($1, $2)', [testDosen.id, testAdmin.id]);
+    // Unlock kegiatan first: processing/SK issuance sets kegiatan_dosen.used_in_usulan_id,
+    // whose FK would otherwise block deleting the usulan.
+    await pool.query('UPDATE sk.kegiatan_dosen SET used_in_usulan_id = NULL WHERE dosen_id = $1', [testDosen.id]);
+    await pool.query('DELETE FROM sk.usulan_kenaikan_pangkat WHERE dosen_id = $1', [testDosen.id]);
     await pool.query('DELETE FROM sk.kegiatan_dosen WHERE dosen_id = $1', [testDosen.id]);
     await pool.query('DELETE FROM sk.audit_logs WHERE user_id IN ($1, $2)', [testDosen.id, testAdmin.id]);
     await pool.query('DELETE FROM sk.users WHERE id IN ($1, $2)', [testDosen.id, testAdmin.id]);
@@ -60,33 +94,55 @@ describe('Usulan Kenaikan Pangkat API', () => {
   // POST /api/v1/usulan - Create Usulan
   // ==========================================
   describe('POST /api/v1/usulan', () => {
-    it('should create new usulan for dosen', async () => {
-      const response = await request(app)
+    // Build a multipart submission and attach every required administrative document.
+    const submitWithRequiredDocs = (token) => {
+      let req = request(app)
         .post('/api/v1/usulan')
-        .set('Authorization', `Bearer ${dosenToken}`)
-        .send({
-          jabatan_asal: 'Asisten Ahli',
-          jabatan_tujuan: 'Lektor',
-          periode_penilaian_mulai: '2024-01-01',
-          periode_penilaian_selesai: '2025-12-31',
-        })
-        .expect(201);
+        .set('Authorization', `Bearer ${token}`)
+        .field('jabatan_tujuan_id', '2'); // Tenaga Pengajar (1) -> Asisten Ahli (2)
+      for (const id of requiredJenisIds) {
+        req = req.attach(`dokumen_${id}`, VALID_PDF);
+      }
+      return req;
+    };
+
+    it('should create new usulan for dosen when all required documents are attached', async () => {
+      const response = await submitWithRequiredDocs(dosenToken).expect(201);
 
       expect(response.body).toHaveProperty('message');
       expect(response.body).toHaveProperty('data');
       expect(response.body.data).toHaveProperty('id');
       expect(response.body.data.status).toBe('pending');
+      expect(response.body.data.dokumen_count).toBe(requiredJenisIds.length);
 
       createdUsulanId = response.body.data.id;
+
+      // Documents should be persisted and linked to this usulan
+      const docs = await pool.query(
+        'SELECT COUNT(*) AS total FROM sk.dokumen_administrasi WHERE usulan_id = $1',
+        [createdUsulanId]
+      );
+      expect(parseInt(docs.rows[0].total, 10)).toBe(requiredJenisIds.length);
     });
 
-    it('should reject if jabatan_tujuan is missing', async () => {
+    it('should reject submission when required documents are missing', async () => {
       const response = await request(app)
         .post('/api/v1/usulan')
         .set('Authorization', `Bearer ${dosenToken}`)
-        .send({
-          jabatan_asal: 'Asisten Ahli',
-        })
+        .field('jabatan_tujuan_id', '2') // valid target, but no documents attached
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body).toHaveProperty('missing');
+      expect(Array.isArray(response.body.missing)).toBe(true);
+      expect(response.body.missing.length).toBeGreaterThan(0);
+    });
+
+    it('should reject if jabatan_tujuan_id is missing', async () => {
+      const response = await request(app)
+        .post('/api/v1/usulan')
+        .set('Authorization', `Bearer ${dosenToken}`)
+        .field('catatan', 'no target')
         .expect(400);
 
       expect(response.body).toHaveProperty('error');
@@ -95,7 +151,7 @@ describe('Usulan Kenaikan Pangkat API', () => {
     it('should reject if not authenticated', async () => {
       await request(app)
         .post('/api/v1/usulan')
-        .send({ jabatan_tujuan: 'Lektor' })
+        .field('jabatan_tujuan_id', '2')
         .expect(401);
     });
 
@@ -103,7 +159,7 @@ describe('Usulan Kenaikan Pangkat API', () => {
       await request(app)
         .post('/api/v1/usulan')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ jabatan_tujuan: 'Lektor' })
+        .field('jabatan_tujuan_id', '2')
         .expect(403);
     });
   });
@@ -320,10 +376,13 @@ describe('Usulan Kenaikan Pangkat API', () => {
         .set('Authorization', `Bearer ${dosenToken}`)
         .expect(200);
 
+      // The audit endpoint returns merged entries as an array plus a summary
+      // breakdown (kegiatan / usulan / blockchain counts).
       expect(response.body).toHaveProperty('data');
-      expect(response.body.data).toHaveProperty('blockchain');
-      expect(response.body.data).toHaveProperty('database');
-      expect(Array.isArray(response.body.data.database)).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body).toHaveProperty('summary');
+      expect(response.body.summary).toHaveProperty('blockchain');
+      expect(response.body.summary).toHaveProperty('usulan');
     });
 
     it('should include integrity field for SK issued usulan', async () => {

@@ -1,4 +1,4 @@
-# 🚀 ChainRank Backend - Quick Start Guide
+# 🚀 Prima Backend - Quick Start Guide
 
 ## 📋 Prerequisites
 
@@ -29,7 +29,7 @@ Edit `.env`:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=chainrank_db
+DB_NAME=prima_db
 DB_USER=postgres
 DB_PASSWORD=your_actual_password
 ```
@@ -40,10 +40,10 @@ Pastikan PostgreSQL sudah running, lalu jalankan:
 
 ```bash
 # Create database (jika belum ada)
-psql -U postgres -c "CREATE DATABASE chainrank_db;"
+psql -U postgres -c "CREATE DATABASE prima_db;"
 
 # Import schema
-psql -U postgres -d chainrank_db -f ../database/schema-hybrid.sql
+psql -U postgres -d prima_db -f ../database/schema-hybrid.sql
 ```
 
 ### 4️⃣ Run Backend Server
@@ -87,7 +87,7 @@ curl http://localhost:3000/health
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@chainrank.com","password":"admin123"}'
+  -d '{"email":"admin@prima.com","password":"admin123"}'
 ```
 
 ### Get Current User (dengan JWT token)
@@ -132,12 +132,12 @@ npm test        # Run tests (belum diimplementasi)
 Jika Anda sudah menjalankan schema database, terdapat 2 user default:
 
 ### Admin:
-- **Email**: `admin@chainrank.com`
+- **Email**: `admin@prima.com`
 - **Password**: `admin123`
 - **Role**: `admin`
 
 ### Dosen:
-- **Email**: `dosen@chainrank.com`
+- **Email**: `dosen@prima.com`
 - **Password**: `dosen123`
 - **Role**: `dosen`
 
@@ -149,7 +149,7 @@ Jika Anda sudah menjalankan schema database, terdapat 2 user default:
 |----------|-------------|---------|
 | `DB_HOST` | Database host | `localhost` |
 | `DB_PORT` | Database port | `5432` |
-| `DB_NAME` | Database name | `chainrank_db` |
+| `DB_NAME` | Database name | `prima_db` |
 | `DB_USER` | Database user | `postgres` |
 | `DB_PASSWORD` | Database password | - |
 | `JWT_SECRET` | JWT signing secret | (auto-generated) |
