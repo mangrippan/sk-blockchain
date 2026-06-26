@@ -1,563 +1,283 @@
-# Prima - Sistem Kenaikan Pangkat Dosen Berbasis Blockchain 🎓
+# Prima — Sistem Usulan Kenaikan Pangkat Dosen Berbasis Blockchain
 
-> **Hybrid Blockchain System** untuk pencatatan dan verifikasi kenaikan pangkat dosen menggunakan **PostgreSQL** (database) + **Hyperledger Fabric** (blockchain).
+Sistem **hybrid** untuk pencatatan dan verifikasi kenaikan pangkat dosen:
+**PostgreSQL** menyimpan data operasional (off-chain), **Hyperledger Fabric** menyimpan
+hash & jejak audit yang immutable (on-chain).
 
-[![Status](https://img.shields.io/badge/Status-MVP%20Complete-success)]()
-[![Backend](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-brightgreen)]()
-[![Frontend](https://img.shields.io/badge/Frontend-Vue.js%203-42b883)]()
-[![Blockchain](https://img.shields.io/badge/Blockchain-Hyperledger%20Fabric-blue)]()
-[![Database](https://img.shields.io/badge/Database-PostgreSQL%2015-blue)]()
+| Komponen   | Teknologi                                  | Port               |
+| ---------- | ------------------------------------------ | ------------------ |
+| Frontend   | Vue 3 + Vite + Tailwind + Pinia            | `5173`             |
+| Backend    | Node.js + Express + JWT                    | `3000`             |
+| Database   | PostgreSQL 15 (Docker)                     | `5434`             |
+| Blockchain | Hyperledger Fabric (test-network, CCAAS)   | peer `7051`        |
+| State DB   | CouchDB (Org1 / Org2)                       | `5984` / `7984`    |
+
+> Channel: **primachannel** · Chaincode: **prima**
 
 ---
 
-## ⚡ Quick Start
+## 1. Prasyarat (Prerequisites)
 
-**First time setup:**
+Aplikasi ini dikembangkan dan dijalankan di **Windows 11 + WSL2 + Docker Desktop**.
+Backend sengaja dijalankan **di dalam WSL** agar bisa terhubung andal ke container
+Fabric yang juga berjalan di Docker WSL (menghindari error `ECONNREFUSED 127.0.0.1:7051`).
+
+Pastikan terpasang:
+
+1. **Windows 10/11**
+2. **WSL2** dengan distro **Ubuntu**
+   ```powershell
+   wsl --install -d Ubuntu
+   ```
+3. **Docker Desktop** — aktifkan **WSL2 integration** untuk distro Ubuntu
+   (Settings → Resources → WSL Integration). Alokasikan minimal **6 GB RAM / 4 CPU**.
+4. **Node.js 18+ & npm di Windows** (untuk menjalankan frontend) — <https://nodejs.org>
+5. **Node.js 18+ di WSL Ubuntu** (untuk menjalankan backend) — lihat langkah setup di bawah
+6. **Git**
+
+---
+
+## 2. Instalasi (Sekali Saja)
+
+### 2.1 Clone repository
 ```powershell
-# 1. Setup Node.js in WSL (once)
-.\setup-nodejs-wsl.ps1
-
-# 2. Start all services
-.\start-all.ps1
-# Choose: 1) WSL mode (recommended)
-```
-
-**Access:**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3000
-- Swagger: http://localhost:3000/api-docs
-
-**📖 Full Reference:** [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
-
----
-
-## 🌟 Highlights
-
-- ✅ **Blockchain Integration:** Semua kegiatan & usulan dicatat di Hyperledger Fabric untuk immutable audit trail
-- ✅ **CouchDB State Database:** Rich queries untuk blockchain state (query by status, dosenId, date range)
-- ✅ **Document Integrity:** SHA-256 hashing untuk detect file tampering
-- ✅ **Hybrid Architecture:** Speed dari PostgreSQL + Security dari Blockchain
-- ✅ **Real-time KUM Tracking:** Progress bar monitoring akumulasi poin dosen
-- ✅ **Complete Workflow:** Upload → Verify → Proposal → SK Issuance
-- ✅ **Audit Trail:** Full history tracking dari blockchain
-- ✅ **14 API Endpoints:** Fully tested and documented
-
----
-
-## 📚 Documentation Structure
-
-Project ini memiliki **2 roadmap** berbeda sesuai kebutuhan:
-
-### 1️⃣ [plan.md](plan.md) - **MVP untuk Tugas Kuliah** ✅ **CURRENT**
-- ⏱️ **Timeline:** 1 bulan (4 minggu)
-- 🎯 **Tujuan:** Proof of Concept untuk tugas kuliah
-- 👥 **Resource:** 1-2 orang
-- 📦 **Scope:** Core features only (upload, hash, verify, audit trail)
-- ✅ **Deliverable:** Working demo + dokumentasi + video
-- 📊 **Progress:** Week 1 ✅ | Week 2 ✅ | Week 3 🔄 | Week 4 ⏳
-
-**Mulai dari sini jika:**
-- Ini untuk tugas kuliah/akademik
-- Timeline kamu terbatas (1-2 bulan)
-- Butuh demo yang bisa jalan dengan fitur essential
-
-### 2️⃣ [plan-full.md](plan-full.md) - **Production Roadmap**
-- ⏱️ **Timeline:** 7-8 bulan
-- 🎯 **Tujuan:** Production-ready enterprise system
-- 👥 **Resource:** 10-12 orang (backend, frontend, DevOps, QA, security)
-- 📦 **Scope:** Full features dengan security, scalability, monitoring, dll
-- ✅ **Deliverable:** Deployed production app dengan 99.9% uptime
-
-**Gunakan ini jika:**
-- Mau develop untuk production/real deployment
-- Ada budget & team untuk long-term development
-- Butuh enterprise-grade system
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────┐         ┌─────────────┐         ┌──────────────────┐
-│   Vue.js    │◄───────►│  Express.js │◄───────►│   PostgreSQL     │
-│  Frontend   │  HTTP   │   Backend   │  SQL    │   (Off-chain)    │
-└─────────────┘         └──────┬──────┘         └──────────────────┘
-                               │
-                               │ Fabric SDK
-                               ▼
-                        ┌──────────────┐         ┌──────────────────┐
-                        │  Hyperledger │◄───────►│   CouchDB x2     │
-                        │    Fabric    │  State  │  (State DB)      │
-                        │ (On-chain)   │         │  Org1 + Org2     │
-                        └──────────────┘         └──────────────────┘
-                        - 2 Peers (Org1, Org2)
-                        - 1 Orderer
-                        - Channel: primachannel
-                        - Chaincode: prima
-                        - CouchDB: Rich queries
-```
-
-### Data Flow
-1. **Upload Kegiatan:** Frontend → Backend → PostgreSQL (data) → Fabric (hash) → CouchDB (state)
-2. **Verify:** Admin verifikasi → Status update di PostgreSQL + Fabric → CouchDB state updated
-3. **Audit Trail:** Query blockchain history → Tampilkan timeline di frontend
-4. **Rich Queries:** Query CouchDB for filtering (by status, dosenId, date range)
-
----
-
-## 🔄 Migration Path
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     DEVELOPMENT JOURNEY                      │
-└─────────────────────────────────────────────────────────────┘
-
-  START HERE (Week 1-4)          CONTINUE HERE (Month 2-8)
-┌──────────────────┐          ┌───────────────────────────┐
-│                  │          │                           │
-│   plan.md        │  ====>   │    plan-full.md           │
-│   (MVP/POC)      │          │    (Production)           │
-│                  │          │                           │
-│ ✅ Core features │          │ ✅ Security hardening     │
-│ ✅ Basic UI      │          │ ✅ Scalability            │
-│ ✅ 1 peer        │          │ ✅ Monitoring             │
-│ ✅ Simple auth   │          │ ✅ CI/CD                  │
-│ ✅ Manual test   │          │ ✅ Advanced features      │
-│                  │          │ ✅ Multiple environments  │
-└──────────────────┘          └───────────────────────────┘
-        ↓                                  ↓
-   DEMO READY                      PRODUCTION READY
- (Tugas selesai!)                 (Real deployment)
-```
-
-**Kunci sukses migration:** Ikuti **Design Principles** di [plan.md](plan.md) sejak awal!
-
----
-
-## � Quick Start
-
-### Prerequisites
-- **Node.js** v18+ & npm
-- **PostgreSQL** 15+ (atau Docker)
-- **Docker** & Docker Compose
-- **Git**
-
-### Installation
-
-#### 1. Clone Repository
-```bash
 git clone <repo-url>
 cd UsulanKenaikanPangkatBlockchain
 ```
 
-#### 2. Setup Database
-```bash
-# Using Docker (Recommended)
-docker-compose -f docker-compose.dev.yml up -d
+### 2.2 Install Node.js di WSL
+```powershell
+.\setup-nodejs-wsl.ps1
+```
+Script ini memasang Node.js 18 LTS di Ubuntu (dibutuhkan agar backend bisa konek ke Fabric).
 
-# Database akan running di port 5434
-# Credentials: postgres/postgres123
-# Database: prima_db
+### 2.3 Install dependency
+```powershell
+# Backend
+cd backend;  npm install;  cd ..
+# Frontend
+cd frontend; npm install;  cd ..
+# Fabric helper (enroll wallet, dll.)
+cd fabric-network; npm install; cd ..
+```
+> Catatan: `.\run.ps1` akan otomatis menjalankan `npm install` jika folder
+> `node_modules` belum ada, jadi langkah ini opsional.
+
+### 2.4 Pasang binary Hyperledger Fabric (untuk fitur blockchain)
+Folder `fabric-network/fabric-samples/` (berisi `bin/` dan `test-network/`) harus tersedia.
+Jika belum ada, jalankan installer resmi Fabric di dalam WSL:
+```powershell
+wsl -d Ubuntu -- bash fabric-network/install-fabric.sh
+```
+> Lewati langkah ini jika ingin menjalankan **mode database-saja** (tanpa blockchain).
+> Lihat bagian [Mode tanpa blockchain](#mode-tanpa-blockchain).
+
+### 2.5 Konfigurasi environment variables
+
+**Backend** — salin contoh lalu sesuaikan:
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
+Edit `backend\.env`, pastikan nilai berikut **cocok dengan Docker PostgreSQL**:
+```ini
+DB_HOST=localhost
+DB_PORT=5434
+DB_NAME=prima_db
+DB_USER=postgres
+DB_PASSWORD=postgres123        # <-- WAJIB: password container Docker
+DB_SCHEMA=sk
+
+JWT_SECRET=<isi minimal 32 karakter acak>   # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+FABRIC_ENABLED=true            # set 'false' untuk mode database-saja
+FABRIC_CHANNEL=primachannel
+FABRIC_CHAINCODE=prima
 ```
 
-#### 3. Setup Backend
-```bash
-cd backend
+**Frontend** — `frontend\.env` sudah berisi nilai default yang benar
+(`VITE_API_URL=/api/v1`, lewat proxy Vite, jadi tidak perlu diubah untuk dev lokal).
 
-# Install dependencies
-npm install
+---
 
-# Copy environment variables
-cp .env.example .env
+## 3. Menjalankan Aplikasi (Cara Cepat)
 
-# Jalankan server
-npm start
+Satu perintah untuk menyalakan **semua** layanan (PostgreSQL → Fabric → Backend → Frontend):
 
-# Server akan running di http://localhost:3000
+```powershell
+.\run.ps1
 ```
 
-#### 4. Setup Frontend
-```bash
+Pada run pertama, Fabric dibangun dari nol (~2–3 menit) — schema database & data awal
+ter-load otomatis dari `docker-compose.dev.yml`, dan wallet Fabric (identitas admin)
+di-enroll otomatis. Di akhir, script menjalankan **health check** dan melaporkan status
+tiap komponen secara jujur (OK / FAIL).
+
+**Flag yang tersedia:**
+
+| Perintah                     | Fungsi                                                        |
+| ---------------------------- | ------------------------------------------------------------ |
+| `.\run.ps1`                  | Start semua layanan                                          |
+| `.\run.ps1 -Clean`           | Hard reset Fabric (wipe ledger + CouchDB), build ulang penuh |
+| `.\run.ps1 -SkipFabric`      | Jalankan tanpa blockchain (DB + backend + frontend saja)     |
+| `.\run.ps1 -SkipFrontend`    | Jalankan backend/API saja (tanpa frontend)                   |
+| `.\run.ps1 -Verify`          | Hanya cek kesehatan layanan, tidak menyalakan apa pun        |
+
+---
+
+## 4. Mengakses Aplikasi
+
+| Layanan          | URL                                              |
+| ---------------- | ------------------------------------------------ |
+| Frontend         | <http://localhost:5173>                          |
+| Backend API      | <http://localhost:3000>                          |
+| Health check     | <http://localhost:3000/health>                   |
+| Swagger / Docs   | <http://localhost:3000/api-docs>                 |
+| CouchDB (Org1)   | <http://localhost:5984/_utils> (`admin` / `adminpw`) |
+
+### Akun bawaan (seed data)
+
+| Role        | Email                      | Password   |
+| ----------- | -------------------------- | ---------- |
+| Superadmin  | `admin@prima.test`         | `admin123` |
+| Admin SDM   | `sdm@prima.test`           | `admin123` |
+| Dosen       | `budi.santoso@prima.test`  | `dosen123` |
+| Dosen       | `ani.wijaya@prima.test`    | `dosen123` |
+| Pimpinan    | `ahmad.dahlan@prima.test`  | `dosen123` |
+| Auditor     | `auditor@prima.test`       | `dosen123` |
+
+> Hanya untuk pengembangan lokal — jangan dipakai di produksi.
+
+---
+
+## 5. Menghentikan Aplikasi
+
+```powershell
+.\stop-all.ps1          # SOFT stop — data ledger + CouchDB DIPERTAHANKAN
+.\stop-all.ps1 -Hard    # HARD stop — hapus volume, wipe ledger + CouchDB
+```
+Soft stop mematikan backend (proses WSL) & frontend, lalu mem-*pause* container Fabric.
+Saat dinyalakan lagi dengan `.\run.ps1`, jaringan **di-resume** tanpa kehilangan data.
+
+---
+
+## 6. Menjalankan per Komponen (Manual / Alternatif)
+
+Berguna saat development satu bagian saja.
+
+**PostgreSQL** (Docker):
+```powershell
+docker compose -f docker-compose.dev.yml up -d
+# DB prima_db di localhost:5434 (postgres / postgres123), schema & seed auto-load saat pertama kali
+```
+
+**Fabric network** (Windows PowerShell):
+```powershell
+.\fabric-network\start-network-ccaas.ps1   # build network + deploy chaincode + enroll wallet
+```
+
+**Backend** (di dalam WSL, agar konek ke Fabric):
+```powershell
+.\start-backend-wsl.ps1
+```
+
+**Frontend** (Windows):
+```powershell
 cd frontend
-
-# Install dependencies
-npm install
-
-# Jalankan development server
-npm run dev
-
-# Frontend akan running di http://localhost:5173
+npm run dev      # http://localhost:5173
 ```
-
-#### 5. Setup Hyperledger Fabric (Optional - untuk blockchain features)
-```bash
-cd fabric-network
-
-# Start Fabric network with CouchDB state database
-.\start-network.ps1   # Windows PowerShell
-# atau
-./start-network.sh    # Linux/Mac
-
-# Network includes:
-# - 2 Peers (Org1, Org2)
-# - 1 Orderer
-# - 2 CouchDB instances (for rich queries)
-# - Chaincode deployed automatically
-
-# Verify CouchDB running:
-docker ps | grep couchdb
-
-# Access CouchDB Web UI (Fauxton):
-# Org1: http://localhost:5984/_utils (admin/adminpw)
-# Org2: http://localhost:7984/_utils (admin/adminpw)
-```
-
-**CouchDB State Database:**
-- Enables rich queries (query by status, dosenId, date range)
-- Web UI for inspecting blockchain state data
-- Database: `primachannel_prima`
-- Automatic index deployment from chaincode
-
-### First Login
-
-**Admin SDM:**
-- Email: `dewi.lestari@prima.test`
-- Password: `password123`
-
-**Dosen:**
-- Email: `budi.santoso@prima.test`
-- Password: `password123`
-
-**Superadmin:**
-- Email: `admin@prima.test`
-- Password: `password123`
 
 ---
 
-## 📖 API Documentation
+## <a name="mode-tanpa-blockchain"></a>7. Mode Tanpa Blockchain (Database-Saja)
 
-### Endpoints
+Untuk demo cepat tanpa menyalakan Fabric:
 
-#### Authentication
-- `POST /api/v1/auth/register` - Register user baru
-- `POST /api/v1/auth/login` - Login & get JWT token
-- `GET /api/v1/auth/me` - Get current user profile
+1. Set `FABRIC_ENABLED=false` di `backend\.env`, **atau**
+2. Jalankan `.\run.ps1 -SkipFabric`
 
-#### Reference Data
-- `GET /api/v1/ref/kegiatan` - List semua jenis kegiatan
-- `GET /api/v1/ref/kategori` - List kategori KUM
-
-#### Kegiatan
-- `POST /api/v1/kegiatan` - Upload kegiatan baru (with file)
-- `GET /api/v1/kegiatan` - List kegiatan user
-- `GET /api/v1/kegiatan/:id` - Detail kegiatan
-- `PUT /api/v1/kegiatan/:id/verify` - Admin: Verify/Reject kegiatan
-- `GET /api/v1/kegiatan/stats/dashboard` - Dashboard statistics
-
-#### Usulan Kenaikan Pangkat
-- `POST /api/v1/usulan` - Ajukan usulan kenaikan pangkat
-- `GET /api/v1/usulan` - List usulan (filtered by role)
-- `GET /api/v1/usulan/:id` - Detail usulan
-- `PUT /api/v1/usulan/:id/proses` - Admin: Process usulan
-- `PUT /api/v1/usulan/:id/tolak` - Admin: Reject usulan
-- `PUT /api/v1/usulan/:id/terbitkan-sk` - Admin: Issue SK
-- `GET /api/v1/usulan/:id/audit` - Get audit trail
-
-#### System
-- `GET /api/v1/health` - Health check (database, blockchain, uptime)
-
-**Dokumentasi lengkap:** Lihat [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md) atau import [docs/Prima.postman_collection.json](docs/Prima.postman_collection.json) ke Postman.
+Backend tetap melayani semua endpoint; fitur pencatatan/verifikasi on-chain
+dinonaktifkan (fallback ke PostgreSQL saja).
 
 ---
 
-## 🎯 Features
+## 8. Troubleshooting
 
-### ✅ Completed (Week 1-2)
-- [x] Database setup dengan schema hybrid (8 tables)
-- [x] Hyperledger Fabric network running (2 peers, 1 orderer)
-- [x] Chaincode deployed (`prima` v1.0)
-- [x] Backend API (14 endpoints, 100% tested)
-- [x] Authentication & Authorization (JWT + RBAC)
-- [x] File upload & SHA-256 hashing
-- [x] Blockchain integration (with fallback mode)
-- [x] Audit trail logging
-- [x] Postman collection & API documentation
-- [x] Vue.js frontend with Tailwind CSS
-- [x] Login & Dashboard pages
-- [x] Kegiatan management (create, list, detail)
-- [x] Usulan management (create, list, detail)
-- [x] State management (Pinia)
-- [x] Progress bar KUM tracking
-- [x] Status badges
-- [x] File upload component
+**Backend tidak konek ke Fabric / "Blockchain tidak terhubung"**
+- Pastikan peer aktif: `.\run.ps1 -Verify` (cek port `7051` & container chaincode).
+- Backend **harus** berjalan di WSL (`.\start-backend-wsl.ps1`), bukan native Windows.
+- Jika rusak total, build ulang bersih: `.\run.ps1 -Clean`.
 
-### 🔄 In Progress (Week 3)
-- [ ] Verifikasi page for Admin SDM
-- [ ] Audit trail timeline component
-- [ ] Document hash verification UI
-- [ ] SK issuance workflow
-- [ ] Complete responsive design
-
-### ⏳ Planned (Week 4)
-- [ ] End-to-end testing
-- [ ] Video demo recording
-- [ ] Laporan documentation
-- [ ] Docker Compose full stack
-- [ ] Deployment guide
-
----
-
-## 🧪 Testing
-
-### Backend Testing
-```bash
-cd backend
-
-# Test all endpoints
-node test-all-endpoints.js
-
-# Test specific module
-node test-api-kegiatan.js
+**Wallet kosong / error identitas Fabric**
+```powershell
+cd fabric-network; node enrollUser.js; cd ..
+# atau enroll identitas admin yang dipakai backend:
+cd backend; node enroll-wallet.js; cd ..
 ```
 
-### Using Postman
-1. Import [docs/Prima.postman_collection.json](docs/Prima.postman_collection.json)
-2. Login dengan user test → Copy token
-3. Set token di Authorization header
-4. Test endpoints sesuai kebutuhan
-
----
-
-## 🐛 Troubleshooting
-
-### ⚠️ Chaincode Deployment Error (Broken Pipe)
-**Symptoms:** Error saat `.\start-network.ps1`:
-```
-Error: docker build failed: write unix @->/var/run/docker.sock: write: broken pipe
-```
-
-**Quick Fix:** 
-1. Restart Docker Desktop
-2. Increase Docker resources (6GB RAM, 4 CPUs)
-3. Run `.\restart-fabric.ps1`
-
-📖 **Detailed Guide:** [QUICK_FIX_CHAINCODE.md](QUICK_FIX_CHAINCODE.md)  
-📖 **Full Analysis:** [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
-
-### Database Connection Failed
-```bash
-# Check PostgreSQL container
-docker ps | grep postgres
-
-# Restart container jika perlu
-docker restart prima_postgres_dev
-
-# Check logs
+**Gagal konek database**
+```powershell
+docker ps                       # pastikan prima_postgres_dev "Up (healthy)"
 docker logs prima_postgres_dev
+docker restart prima_postgres_dev
+```
+Pastikan juga `DB_PASSWORD=postgres123` di `backend\.env`.
+
+**Port 3000 / 5173 sudah dipakai**
+```powershell
+.\stop-all.ps1                  # mematikan proses di port 3000 & 5173 (termasuk node WSL)
 ```
 
-### Backend Port Already in Use
-```bash
-# Kill process di port 3000
-# Windows:
-netstat -ano | findstr :3000
-taskkill /PID <PID> /F
+**Build chaincode gagal (broken pipe / docker.sock)**
+- Restart Docker Desktop, naikkan resource (≥6 GB RAM / 4 CPU), lalu `.\run.ps1 -Clean`.
 
-# Linux/Mac:
-lsof -ti:3000 | xargs kill -9
-```
-
-### Fabric Network Issues (General)
-- **Quick troubleshooting:** [FABRIC_ISSUES.md](FABRIC_ISSUES.md)
-- **Chaincode deployment:** [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
-- **Fallback mode:** Set `FABRIC_ENABLED=false` di `.env`
-- Backend tetap bisa jalan tanpa blockchain (database-only mode)
-
-### Frontend Cannot Connect to Backend
-- Pastikan backend running di port 3000
-- Check CORS settings di `backend/server.js`
-- Verify axios baseURL di `frontend/src/api/config.js`
+**Schema database berubah** (mis. menarik commit dengan migrasi baru)
+- Cara termudah: `docker compose -f docker-compose.dev.yml down -v` lalu `up -d`
+  (schema + seed + migrasi akan di-load ulang dari nol).
 
 ---
 
-## 📁 Project Structure
+## 9. Pengujian
+
+```powershell
+# Unit test chaincode
+cd chaincode; npm test; cd ..
+
+# Unit/integration test backend
+cd backend; npm test; cd ..
+```
+
+Pengujian API manual: import koleksi Postman
+[`docs/Prima.postman_collection.json`](docs/Prima.postman_collection.json), atau lihat
+[`docs/API_TESTING_GUIDE.md`](docs/API_TESTING_GUIDE.md).
+
+---
+
+## 10. Struktur Proyek
 
 ```
 UsulanKenaikanPangkatBlockchain/
-├── backend/               # Express.js Backend
-│   ├── config/           # Database & configuration
-│   ├── controllers/      # (Optional - currently logic in routes)
-│   ├── middleware/       # Auth middleware
-│   ├── models/           # Database models
-│   ├── routes/v1/        # API routes (versioned)
-│   ├── services/         # (Future: business logic)
-│   ├── uploads/          # Uploaded files
-│   ├── utils/            # Helper functions
-│   ├── validators/       # (Future: input validation)
-│   └── server.js         # Entry point
-│
-├── chaincode/            # Hyperledger Fabric Chaincode
-│   └── lib/
-│       └── kegiatanContract.js  # Smart contract
-│
-├── database/             # Database schema & seeds
-│   ├── schema-hybrid.sql       # Main schema (CANONICAL)
-│   ├── seed.sql                # Sample data
-│   └── setup-database.js       # Setup script
-│
-├── fabric-config/        # Fabric connection profiles
-│   ├── connection-org1.json    # Connection profile
-│   └── wallet/                 # Identity wallet
-│
-├── fabric-network/       # Fabric network scripts
-│   ├── start-network.ps1       # Start Fabric (Windows)
-│   ├── start-network.sh        # Start Fabric (Linux/Mac)
-│   └── stop-network.ps1        # Stop Fabric
-│
-├── frontend/             # Vue.js Frontend
-│   ├── src/
-│   │   ├── api/          # API client
-│   │   ├── components/   # Reusable components
-│   │   ├── router/       # Vue Router
-│   │   ├── stores/       # Pinia stores
-│   │   ├── views/        # Page components
-│   │   └── App.vue       # Root component
-│   └── package.json
-│
-├── docs/                 # Documentation
-│   ├── API_TESTING_GUIDE.md
-│   ├── Prima.postman_collection.json
-│   ├── FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md  # Troubleshooting chaincode
-│   ├── WEEK1_PROGRESS.md
-│   └── WEEK2_COMPLETION_SUMMARY.md
-│
-├── docker-compose.dev.yml      # Docker Compose (PostgreSQL only)
-├── plan.md                      # MVP Roadmap (1 month)
-├── plan-full.md                 # Production Roadmap (7-8 months)
-├── FABRIC_ISSUES.md            # Fabric troubleshooting (general)
-├── QUICK_FIX_CHAINCODE.md      # Quick fix for chaincode deployment
-└── README.md                    # This file
+├── backend/             # API Express.js (jalan di WSL)
+│   ├── routes/v1/       # Endpoint API (auth, kegiatan, usulan, dll.)
+│   ├── middleware/      # Auth JWT + RBAC
+│   ├── utils/           # fabricClient.js (SDK Fabric), helper
+│   └── server.js        # Entry point
+├── frontend/            # Aplikasi Vue 3 + Vite
+│   └── src/{views,components,stores,router,api}
+├── chaincode/           # Smart contract (chaincode "prima")
+│   └── lib/             # kegiatanContract.js, dll.
+├── fabric-network/      # Script jaringan Fabric (CCAAS) + fabric-samples
+├── fabric-config/       # Connection profile + wallet identitas
+├── database/            # schema-hybrid.sql, seed.sql, migrasi
+├── docs/                # Panduan, laporan, koleksi Postman
+├── docker-compose.dev.yml   # PostgreSQL (dev)
+├── run.ps1              # ▶ Start semua layanan
+└── stop-all.ps1         # ■ Stop semua layanan
 ```
 
 ---
 
-## 🔗 Useful Links
-
-### Getting Started
-- **Plan MVP:** [plan.md](plan.md)
-- **Plan Production:** [plan-full.md](plan-full.md)
-- **Database Quick Start:** [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md)
-- **Fabric Quick Start:** [FABRIC_QUICKSTART.md](FABRIC_QUICKSTART.md)
-
-### API & Testing
-- **API Testing Guide:** [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)
-- **Postman Collection:** [docs/Prima.postman_collection.json](docs/Prima.postman_collection.json)
-
-### Troubleshooting
-- **🔥 Chaincode Quick Fix:** [QUICK_FIX_CHAINCODE.md](QUICK_FIX_CHAINCODE.md) ← Start here!
-- **📖 Chaincode Deployment Issues:** [docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md](docs/FABRIC_CHAINCODE_DEPLOYMENT_ISSUES.md)
-- **Fabric Issues (General):** [FABRIC_ISSUES.md](FABRIC_ISSUES.md)
-
-### Progress Reports
-- **Week 1 Progress:** [docs/WEEK1_PROGRESS.md](docs/WEEK1_PROGRESS.md)
-- **Week 2 Summary:** [docs/WEEK2_COMPLETION_SUMMARY.md](docs/WEEK2_COMPLETION_SUMMARY.md)
-
----
-
----
-
-## 🛠️ Tech Stack
-
-### Core Technologies
-- **Frontend:** Vue.js 3, Pinia, Tailwind CSS, Axios
-- **Backend:** Node.js, Express.js, multer, bcrypt, JWT
-- **Blockchain:** Hyperledger Fabric v2.5+
-- **Database:** PostgreSQL 15+
-- **Containerization:** Docker, Docker Compose
-
-### Additional (Production - see plan-full.md)
-- **Caching:** Redis
-- **Storage:** MinIO / AWS S3
-- **Monitoring:** Prometheus + Grafana
-- **Logging:** Loki / ELK Stack
-- **Orchestration:** Kubernetes
-- **CI/CD:** GitHub Actions
-
----
-
-## 🔄 Migration Path
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     DEVELOPMENT JOURNEY                      │
-└─────────────────────────────────────────────────────────────┘
-
-  START HERE (Week 1-4)          CONTINUE HERE (Month 2-8)
-┌──────────────────┐          ┌───────────────────────────┐
-│                  │          │                           │
-│   plan.md        │  ====>   │    plan-full.md           │
-│   (MVP/POC)      │          │    (Production)           │
-│                  │          │                           │
-│ ✅ Core features │          │ ✅ Security hardening     │
-│ ✅ Basic UI      │          │ ✅ Scalability            │
-│ ✅ 1 channel     │          │ ✅ Monitoring             │
-│ ✅ Simple auth   │          │ ✅ CI/CD                  │
-│ ✅ Manual test   │          │ ✅ Advanced features      │
-│                  │          │ ✅ Multiple orgs          │
-└──────────────────┘          └───────────────────────────┘
-        ↓                                  ↓
-   DEMO READY                      PRODUCTION READY
- (Tugas selesai!)                 (Real deployment)
-```
-
-**Kunci sukses migration:** Ikuti **Design Principles** di [plan.md](plan.md) sejak awal!
-
----
-
-## 📋 Project Status
-
-- [x] **Week 1:** Infrastructure Setup (100%)
-- [x] **Week 2:** Backend API Development (100%)
-- [x] **Week 3:** Frontend Development (85%)
-- [ ] **Week 4:** Testing, Documentation & Finalisasi (40%)
-
-**Current Phase:** MVP Development (Tugas Kuliah)  
-**Next Milestone:** Complete Week 4 → Demo Ready
-
----
-
-## 🤝 Contributing
-
-Untuk development guidelines dan best practices, lihat:
-- [plan.md](plan.md) - Section "Design Principles untuk Future-Proofing"
-- [plan-full.md](plan-full.md) - Section "Compliance & Legal Considerations"
-
----
-
-## 📝 License
-
-MIT License - See LICENSE file for details
-
----
-
-## 👥 Team
-
-**Developer:** [Your Name]  
-**Supervisor:** [Supervisor Name]  
-**Institution:** [University Name]
-
----
-
-## 📞 Support
-
-Jika menemukan issues atau butuh bantuan:
-1. Check [FABRIC_ISSUES.md](FABRIC_ISSUES.md) untuk troubleshooting Fabric
-2. Check [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md) untuk database issues
-3. Create an issue di GitHub repository
-4. Contact: [your-email@example.com]
-
----
-
-**Last Updated:** Januari 2025  
-**Version:** 1.0.0-mvp  
-**Status:** ✅ Week 1-2 Complete | 🔄 Week 3 In Progress | ⏳ Week 4 Planned
+**Catatan:** README ini fokus pada instalasi & menjalankan secara lokal di lingkungan
+Windows + WSL2. Untuk dokumentasi fungsional & teknis lengkap, lihat folder
+[`docs/`](docs/) (a.l. SKPL, DPPL, panduan testing, dan skenario demo).
+</content>
+</invoke>
