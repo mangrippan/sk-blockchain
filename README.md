@@ -231,25 +231,8 @@ Pastikan juga `DB_PASSWORD=postgres123` di `backend\.env`.
 - Cara termudah: `docker compose -f docker-compose.dev.yml down -v` lalu `up -d`
   (schema + seed + migrasi akan di-load ulang dari nol).
 
----
 
-## 9. Pengujian
-
-```powershell
-# Unit test chaincode
-cd chaincode; npm test; cd ..
-
-# Unit/integration test backend
-cd backend; npm test; cd ..
-```
-
-Pengujian API manual: import koleksi Postman
-[`docs/Prima.postman_collection.json`](docs/Prima.postman_collection.json), atau lihat
-[`docs/API_TESTING_GUIDE.md`](docs/API_TESTING_GUIDE.md).
-
----
-
-## 10. Struktur Proyek
+## 9. Struktur Proyek
 
 ```
 UsulanKenaikanPangkatBlockchain/
@@ -273,8 +256,5 @@ UsulanKenaikanPangkatBlockchain/
 
 ---
 
-**Catatan:** README ini fokus pada instalasi & menjalankan secara lokal di lingkungan
-Windows + WSL2. Untuk dokumentasi fungsional & teknis lengkap, lihat folder
-[`docs/`](docs/) (a.l. SKPL, DPPL, panduan testing, dan skenario demo).
 </content>
 </invoke>
