@@ -138,12 +138,9 @@ tiap komponen secara jujur (OK / FAIL).
 
 | Role        | Email                      | Password   |
 | ----------- | -------------------------- | ---------- |
-| Superadmin  | `admin@prima.test`         | `admin123` |
 | Admin SDM   | `sdm@prima.test`           | `admin123` |
 | Dosen       | `budi.santoso@prima.test`  | `dosen123` |
 | Dosen       | `ani.wijaya@prima.test`    | `dosen123` |
-| Pimpinan    | `ahmad.dahlan@prima.test`  | `dosen123` |
-| Auditor     | `auditor@prima.test`       | `dosen123` |
 
 > Hanya untuk pengembangan lokal — jangan dipakai di produksi.
 
